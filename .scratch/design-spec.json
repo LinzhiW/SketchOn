@@ -3,7 +3,7 @@
   "metadata": {
     "projectName": "Gemtronic Ring",
     "sourceMode": "intent_only",
-    "revision": 8
+    "revision": 9
   },
   "experience": {
     "subject": "wearing a jewelry-grade smart ring whose round screen is the gem",
@@ -509,7 +509,7 @@
       "props": {
         "joint": "first segment of the chosen finger, on whichever hand is raised",
         "lostHandDelayMs": 300,
-        "displayScale": 3.5,
+        "displayScale": 3,
         "tipEnterDeg": 25,
         "tipExitDeg": 10,
         "tipHoldMs": 80,

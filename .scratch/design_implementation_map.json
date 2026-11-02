@@ -2,7 +2,7 @@
   "schema_version": 1,
   "design_spec": {
     "path": "design-spec.json",
-    "sha256": "b3468eb49b4957581f98913d6ec442475b9d9cf4824915e74ece2eb7e6ef643b"
+    "sha256": "50a4438270a81d2127205fa48be4c8d47c5c7f07f0e2b98f2f1df24bc6c50a79"
   },
   "source_mappings": [
     {
@@ -266,7 +266,7 @@
         "props": {
           "joint": "first segment of the chosen finger, on whichever hand is raised",
           "lostHandDelayMs": 300,
-          "displayScale": 3.5,
+          "displayScale": 3,
           "tipEnterDeg": 25,
           "tipExitDeg": 10,
           "tipHoldMs": 80,

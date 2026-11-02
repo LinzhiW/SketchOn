@@ -19,15 +19,19 @@ import kotlinx.coroutines.yield
 
 /** The ring model plus one screen disc per firmware frame, under one [root] entity. */
 internal class RingRig(val root: Entity, private val screens: Map<String, Entity>) {
+    private var shownFrame: String? = null
+
     // One disc per frame: swapping a ModelComponent's material releases the one taken off.
     fun showFrame(frame: String?) {
+        if (frame == shownFrame) return
+        shownFrame = frame
         screens.forEach { (name, screen) -> screen.enabled = name == frame }
     }
 
     companion object {
         // Measured from ring.glb, whose units are millimetres.
         private const val MM_TO_M = 0.001f
-        private const val DISPLAY_SCALE = 3.5f
+        private const val DISPLAY_SCALE = 3f
         private val HOLE_CENTRE_MM = Vector3(-0.21f, -8.02f, 0.78f)
         private val SCREEN_CENTRE_MM = Vector3(-0.24f, 10.05f, 0.78f)
         private const val SCREEN_DIAMETER_MM = 17.9f

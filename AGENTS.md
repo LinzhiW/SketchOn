@@ -38,8 +38,9 @@ A PICO Spatial app that puts the Gemtronic smart ring on the wearer's real hand.
 - Occlusion is not done: the band draws over the finger. The Editor's Occlusion Surface material is the likely fix.
 - PICO does not support glass transmission, so the dome uses a translucent material instead.
 - Follow and tilt are verified on the emulator only. The blue skeleton there is an emulator overlay; turn off Skeleton display to see the ring.
-- Needs a real headset to judge fit, size and comfort. The ring is shown at 3.5x because the emulator holds the hand about 0.75 m away; a headset holds it closer, so this scale may be too large there.
+- Needs a real headset to judge fit, size and comfort. The ring is shown at 3x because the emulator holds the hand about 0.75 m away; a headset holds it closer, so this scale may be too large there.
 - Emulator hand tracking runs near 30 samples a second, jumps, and reads roll poorly. In a recording, 25° tips almost never registered, and 20° misfired while the hand was still. So tips are unreliable on the emulator. Keep 25° and 10° and judge them on a headset. `TRACKING_JUMP_M_S` drops the jumps.
+- The emulator renders at 2 to 3 frames a second with or without this app, and can show an "isn't responding" dialog while the app's main thread is idle (waiting on a focus event). Choose Wait. This has not been checked on a headset.
 - Gestures read the worn finger, as the real ring's sensor does. Do not switch them to the palm.
 
 ## Build and run
