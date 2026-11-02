@@ -1,6 +1,27 @@
 <resources>
-    <string name="app_name">GemtronicRing</string>
+    <string name="app_name">Gemtronic Ring</string>
     <string name="hello">Hello, Spatial SDK！</string>
     <string name="hand_hint">Raise your hand to put on the ring</string>
     <string name="tracking_message">Hand tracking is unavailable. Allow it in system settings, then reopen the app.</string>
+    <string name="finger_title">Tap the finger wearing the ring</string>
+    <string name="hand_picker_description">Hand shape for choosing a finger</string>
+    <string name="finger_thumb">Thumb</string>
+    <string name="finger_index">Index</string>
+    <string name="finger_middle">Middle</string>
+    <string name="finger_ring">Ring</string>
+    <string name="finger_little">Little</string>
+    <string name="wear_button">Put on the ring</string>
+    <string name="guide_title">Same gestures as the real ring</string>
+    <string name="guide_next">Next: tip the ring down to the right</string>
+    <string name="guide_previous">Previous: tip the ring down to the left</string>
+    <string name="guide_open">Open: click once in the air</string>
+    <string name="guide_back">Back: click twice in the air</string>
+    <string name="guide_click">To click in the air, dip your hand sharply and stop.</string>
+    <string name="change_finger">Change finger</string>
+    <string name="ring_screen_description">Large copy of the ring screen</string>
+    <string name="control_title">Controls</string>
+    <string name="previous_page">Previous</string>
+    <string name="next_page">Next</string>
+    <string name="confirm_button">Confirm</string>
+    <string name="back_button">Back</string>
 </resources>

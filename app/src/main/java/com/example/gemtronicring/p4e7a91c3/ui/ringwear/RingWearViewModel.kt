@@ -1,59 +1,67 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 
 import androidx.lifecycle.ViewModel
-import com.example.gemtronicring.p4e7a91c3.domain.model.JointRotation
-import com.example.gemtronicring.p4e7a91c3.domain.model.RingPage
+import com.example.gemtronicring.p4e7a91c3.domain.model.MenuCursor
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingMenu
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
-import com.example.gemtronicring.p4e7a91c3.domain.usecase.TiltPageUseCase
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingSample
+import com.example.gemtronicring.p4e7a91c3.domain.usecase.NavigateMenuUseCase
+import com.example.gemtronicring.p4e7a91c3.domain.usecase.RingGestureUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-class RingWearViewModel(pages: List<RingPage>, private val tiltPage: TiltPageUseCase) :
-    ViewModel() {
-    private val _state = MutableStateFlow(RingWearUiState(pages = pages))
-    val state: StateFlow<RingWearUiState> = _state.asStateFlow()
+class RingWearViewModel(
+    private val menu: RingMenu,
+    private val gestures: RingGestureUseCase,
+    private val navigate: NavigateMenuUseCase,
+) : ViewModel() {
+    private var cursor = MenuCursor(menu.root)
 
-    private var neutral: JointRotation? = null
-    private var armed = true
+    private val _state =
+        MutableStateFlow(
+            RingWearUiState(frames = menu.frames, activeFrame = navigate.frame(menu, cursor))
+        )
+    val state: StateFlow<RingWearUiState> = _state.asStateFlow()
 
     fun onEvent(event: RingWearEvent) {
         when (event) {
-            is RingWearEvent.HandMoved -> onHandMoved(event)
-            RingWearEvent.HandLost -> onHandLost()
+            is RingWearEvent.SelectFinger -> _state.update { it.copy(finger = event.finger) }
+            RingWearEvent.ConfirmFinger -> enter(RingPhase.HandSearching)
+            RingWearEvent.ChangeFinger -> enter(RingPhase.FingerChoosing)
+            is RingWearEvent.HandMoved -> onHandMoved(event.sample)
+            is RingWearEvent.MenuInput -> onMenuInput(event.gesture)
+            RingWearEvent.HandLost ->
+                if (_state.value.phase == RingPhase.RingWorn) enter(RingPhase.HandSearching)
             RingWearEvent.TrackingDenied ->
                 _state.update { it.copy(phase = RingPhase.TrackingUnavailable) }
         }
     }
 
-    private fun onHandMoved(event: RingWearEvent.HandMoved) {
-        if (_state.value.phase == RingPhase.TrackingUnavailable) return
-        val start = neutral
-        if (start == null) {
-            // The pose the hand arrives in counts as neutral.
-            neutral = event.rotation
-            armed = true
-            _state.update { it.copy(phase = RingPhase.RingWorn) }
-            return
-        }
-        val roll = tiltPage.rollDegrees(start, event.rotation)
-        // Mirror the left hand so the same physical tip means the same direction.
-        val step = tiltPage.step(if (event.isLeftHand) -roll else roll, armed)
-        armed = step.armed
-        if (step.pageDelta != 0) {
-            _state.update {
-                it.copy(
-                    activePageIndex =
-                        tiltPage.movedPage(it.activePageIndex, step.pageDelta, it.pages.size)
-                )
-            }
-        }
+    private fun enter(phase: RingPhase) {
+        gestures.reset()
+        _state.update { it.copy(phase = phase) }
     }
 
-    private fun onHandLost() {
-        if (_state.value.phase == RingPhase.TrackingUnavailable) return
-        neutral = null
-        _state.update { it.copy(phase = RingPhase.HandSearching) }
+    private fun onHandMoved(sample: RingSample) {
+        when (_state.value.phase) {
+            RingPhase.HandSearching -> _state.update { it.copy(phase = RingPhase.RingWorn) }
+            RingPhase.RingWorn -> Unit
+            RingPhase.FingerChoosing,
+            RingPhase.TrackingUnavailable -> return
+        }
+        gestures.update(sample)?.let(::moveMenu)
+    }
+
+    private fun onMenuInput(gesture: RingGesture) {
+        val phase = _state.value.phase
+        if (phase == RingPhase.RingWorn || phase == RingPhase.HandSearching) moveMenu(gesture)
+    }
+
+    private fun moveMenu(gesture: RingGesture) {
+        cursor = navigate.move(menu, cursor, gesture)
+        _state.update { it.copy(activeFrame = navigate.frame(menu, cursor)) }
     }
 }

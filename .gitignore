@@ -37,3 +37,9 @@ google-services.json
 .scratch/evidence/
 .scratch/*_result.json
 .scratch/verification_summary.json
+.scratch/apply_*.py
+.scratch/add_diag.py
+.scratch/agents_v8.py
+.scratch/final_docs.py
+.scratch/update_spec_*.py
+.scratch/replay.py

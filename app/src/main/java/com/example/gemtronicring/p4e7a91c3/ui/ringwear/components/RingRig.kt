@@ -1,6 +1,5 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear.components
 
-import com.example.gemtronicring.p4e7a91c3.domain.model.RingPage
 import com.pico.spatial.core.ecs.Entity
 import com.pico.spatial.core.ecs.ModelComponent
 import com.pico.spatial.core.ecs.TransformComponent
@@ -12,18 +11,23 @@ import com.pico.spatial.core.ecs.resource.UnlitMaterial
 import com.pico.spatial.core.math.Quat
 import com.pico.spatial.core.math.Vector3
 import kotlin.math.PI
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 
-/** The ring model plus one screen disc per page, under one [root] entity. */
-internal class RingRig(val root: Entity, private val screens: List<Entity>) {
-    // One disc per page: swapping a ModelComponent's material releases the one taken off.
-    fun showPage(index: Int) {
-        screens.forEachIndexed { i, screen -> screen.enabled = i == index }
+/** The ring model plus one screen disc per firmware frame, under one [root] entity. */
+internal class RingRig(val root: Entity, private val screens: Map<String, Entity>) {
+    // One disc per frame: swapping a ModelComponent's material releases the one taken off.
+    fun showFrame(frame: String?) {
+        screens.forEach { (name, screen) -> screen.enabled = name == frame }
     }
 
     companion object {
         // Measured from ring.glb, whose units are millimetres.
         private const val MM_TO_M = 0.001f
-        private const val DISPLAY_SCALE = 1.5f
+        private const val DISPLAY_SCALE = 3.5f
         private val HOLE_CENTRE_MM = Vector3(-0.21f, -8.02f, 0.78f)
         private val SCREEN_CENTRE_MM = Vector3(-0.24f, 10.05f, 0.78f)
         private const val SCREEN_DIAMETER_MM = 17.9f
@@ -34,7 +38,7 @@ internal class RingRig(val root: Entity, private val screens: List<Entity>) {
         private const val RING_MODEL_URI = "asset://ring.glb"
         private val HALF_TURN = Quat(Vector3(0f, 1f, 0f), PI.toFloat())
 
-        suspend fun create(pages: List<RingPage>): RingRig {
+        suspend fun create(frames: List<String>): RingRig {
             val scale = MM_TO_M * DISPLAY_SCALE
             val model = Entity.loadSuspend(RING_MODEL_URI)
             model.findEntity(WORDMARK_NODE)?.enabled = false
@@ -52,13 +56,29 @@ internal class RingRig(val root: Entity, private val screens: List<Entity>) {
                 )
             }
 
-            val screens = pages.map { page -> createScreen(TextureResource.load(page.assetPath)) }
-            screens.forEach(model::addChild)
+            // Each texture takes about a second, so loading them on the main thread freezes the app.
+            val textures =
+                withContext(Dispatchers.IO) {
+                    frames.map { async { TextureResource.load(framePath(it)) } }.awaitAll()
+                }
+            val disc =
+                MeshResource.createPlane(
+                    SCREEN_DIAMETER_MM,
+                    SCREEN_DIAMETER_MM,
+                    SCREEN_DIAMETER_MM / 2f,
+                )
+            val screens = frames.zip(textures) { frame, texture ->
+                yield()
+                frame to createScreen(disc, texture)
+            }.toMap()
+            screens.values.forEach(model::addChild)
 
             val root = Entity().apply { enabled = false }
             root.addChild(model)
-            return RingRig(root, screens).apply { showPage(0) }
+            return RingRig(root, screens)
         }
+
+        private fun framePath(frame: String) = "pages/$frame.png"
 
         /** PICO has no glass transmission, so the dome would render solid and hide the screen. */
         private fun makeDomeClear(dome: Entity) {
@@ -72,14 +92,8 @@ internal class RingRig(val root: Entity, private val screens: List<Entity>) {
             dome.components[ModelComponent::class.java]?.materials?.set(0, glass)
         }
 
-        private fun createScreen(page: TextureResource): Entity {
+        private fun createScreen(disc: MeshResource, page: TextureResource): Entity {
             val material = UnlitMaterial.create().apply { setBaseColorTexture(page) }
-            val disc =
-                MeshResource.createPlane(
-                    SCREEN_DIAMETER_MM,
-                    SCREEN_DIAMETER_MM,
-                    SCREEN_DIAMETER_MM / 2f,
-                )
             return Entity().apply {
                 components.set(ModelComponent(disc, material))
                 components[TransformComponent::class.java]?.apply {

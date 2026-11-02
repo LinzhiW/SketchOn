@@ -21,10 +21,11 @@ These tasks need the real hand in view and hand joint data, so the form is a Sta
 
 | Assumption | Confidence | What changes if wrong |
 | ---------- | ---------- | --------------------- |
-| A 1.5x ring reads better than true size | Medium | Set `displayScale` to 1 |
+| A 3.5x ring and a large screen copy read better than true size | Medium | Set `displayScale` to 1 and drop `ring-mirror` |
 | 25° trigger and 10° reset feel right | Medium | Tune the two values in `ring-on-hand.props` |
-| Ring finger, first segment | High | Change `joint`; ring position shifts |
-| The 3 pages are gem, clock, pet | High | Swap entries in `dataCases.normal.pages` |
+| The chosen finger, first segment | High | Change `joint`; ring position shifts |
+| The menu is the website simulator's map of the firmware | High | Edit `dataCases.normal.menu` |
+| Double click in the air leaves game and rhythm screens | Medium | The real ring ignores gestures there and needs a button |
 
 ## 2 · Explore — alternatives
 
@@ -56,7 +57,7 @@ Volumetric window. A large ring on a turntable, driven by hand tilt from a dista
 
 ## 3 · Plan
 
-**Executable spec** — `design-spec.json`, schema version `1.0`, revision `3`.
+**Executable spec** — `design-spec.json`, schema version `1.0`, revision `8`.
 
 ### Visual tokens
 
@@ -192,6 +193,11 @@ real room
 | ----- | ------- | ----------- | -------------------- | -------- | ------- |
 | 1 | Hint text too faint on a bright background | `hand-hint`, `tracking-message` fill and size | Readable in any room | 2 | Yes |
 | 2 | The app should be in English | All node text and asset alt text | English UI | 3 | Yes |
+| 3 | The ring needs the real gestures and menu, a finger choice, and instructions | States, actions, panels, data | Same use as the real ring | 4 | Yes |
+| 4 | Finger choice should be a hand shape, no hand question, index by default | `hand-picker` replaces the two selectors | Faster, no reading | 5 | Yes |
+| 5 | The gesture guide sat outside the field of view | `gesture-guide` width and placement | Visible without turning the head | 6 | Yes |
+| 6 | The ring screen was unreadable at arm's length | `displayScale` and new `ring-mirror` | Screen always readable | 7 | Yes |
+| 7 | Gestures need large movements on the emulator, so they cannot be the only input | New `control-panel` on the left; ring at 3.5x | A reliable way to use the ring | 8 | Yes |
 
 **Device validation** — `not_performed` (Web validates logic and layout only; real-device comfort, occlusion, size and performance are not verified).
 

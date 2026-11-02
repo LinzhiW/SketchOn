@@ -8,7 +8,11 @@ body { margin:0; min-height:100vh; display:grid; place-items:center; background-
 #stage-scene { display:grid; place-items:center; max-width:100vw; }
 .overlay { display:grid; place-items:center; }
 .overlay > * { grid-area:1/1; }
-.overlay > [hidden] { display:none; }
+.overlay > [hidden], .column > [hidden] { display:none; }
+.column { display:flex; flex-direction:column; gap:16px; box-sizing:border-box; }
+[data-node-id="gesture-guide"] { justify-self:end; }
+[data-node-id="control-panel"] { justify-self:start; align-items:center; }
+.row { display:flex; gap:16px; justify-content:center; }
 </style>
 <script>/* SpatialUI Web — auto-bundled standalone build.
    Do not edit directly; edit js/*.js and rerun build-standalone.mjs. */
@@ -3696,22 +3700,22 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
 })();
 </script>
 </head><body>
-<main id="app" data-design-spec-revision="3"></main>
+<main id="app" data-design-spec-revision="8"></main>
 <script id="pico-design-spec" type="application/json">{
   "schemaVersion": "1.0",
   "metadata": {
     "projectName": "Gemtronic Ring",
     "sourceMode": "intent_only",
-    "revision": 3
+    "revision": 8
   },
   "experience": {
     "subject": "wearing a jewelry-grade smart ring whose round screen is the gem",
     "user": "the ring's designer and people trying the ring for the first time",
     "context": "standing or seated, hand raised at about 35 cm from the eyes, real room visible",
-    "singleJob": "feel the ring on your own finger and tip it to change its screen",
+    "singleJob": "wear the ring on a chosen finger and use it with the same gestures as the real ring",
     "space": "full",
     "form": "stage_mixed",
-    "signature": "the ring's lit screen is the only UI: tipping the finger changes it, as on the real ring"
+    "signature": "the ring answers the same gestures as the real ring, with a large live copy of its screen beside it"
   },
   "theme": {
     "scheme": "vibrant",
@@ -3784,7 +3788,8 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
     "brandColors": {
       "ringBand": "#3A3A40",
       "ringBezel": "#B9B9C0",
-      "ringScreenBase": "#0B120D"
+      "ringScreenBase": "#0B120D",
+      "handSkin": "#59605C"
     },
     "typography": {
       "title": {
@@ -3838,13 +3843,34 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
       "rootNodeId": "stage-root",
       "placement": {
         "anchor": "user hand",
-        "hintPanelDistanceM": 0.8,
-        "hintPanelHeightOffsetM": -0.1
+        "centerPanelM": [
+          0,
+          1.5,
+          -0.8
+        ],
+        "guidePanelM": [
+          0.34,
+          1.5,
+          -0.85
+        ],
+        "guidePanelYawRad": -0.38,
+        "controlPanelM": [
+          -0.34,
+          1.5,
+          -0.85
+        ],
+        "controlPanelYawRad": 0.38
       }
     }
   ],
-  "initialStateId": "hand-searching",
+  "initialStateId": "finger-choosing",
   "states": [
+    {
+      "id": "finger-choosing",
+      "surfaceRoots": {
+        "stage-scene": "stage-root"
+      }
+    },
     {
       "id": "hand-searching",
       "surfaceRoots": {
@@ -3866,6 +3892,15 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
   ],
   "transitions": [
     {
+      "id": "finger-confirmed",
+      "from": "finger-choosing",
+      "to": "hand-searching",
+      "trigger": {
+        "nodeId": "wear-button",
+        "event": "click"
+      }
+    },
+    {
       "id": "hand-found",
       "from": "hand-searching",
       "to": "ring-worn",
@@ -3884,6 +3919,24 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
       }
     },
     {
+      "id": "change-finger-searching",
+      "from": "hand-searching",
+      "to": "finger-choosing",
+      "trigger": {
+        "nodeId": "change-finger-button",
+        "event": "click"
+      }
+    },
+    {
+      "id": "change-finger-worn",
+      "from": "ring-worn",
+      "to": "finger-choosing",
+      "trigger": {
+        "nodeId": "change-finger-button",
+        "event": "click"
+      }
+    },
+    {
       "id": "tracking-denied",
       "from": "hand-searching",
       "to": "tracking-unavailable",
@@ -3895,18 +3948,22 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
   ],
   "actions": [
     {
-      "id": "show-next-page",
-      "type": "increment",
-      "purpose": "Tipping the finger one way shows the next screen, wrapping after the last",
-      "binding": "state.activePageIndex",
-      "value": 1
+      "id": "select-finger",
+      "type": "set",
+      "purpose": "Choose the finger wearing the ring",
+      "binding": "state.finger"
     },
     {
-      "id": "show-previous-page",
-      "type": "increment",
-      "purpose": "Tipping the finger the other way shows the previous screen, wrapping before the first",
-      "binding": "state.activePageIndex",
-      "value": -1
+      "id": "confirm-finger",
+      "type": "transition",
+      "purpose": "Put the ring on the chosen finger",
+      "transitionId": "finger-confirmed"
+    },
+    {
+      "id": "change-finger",
+      "type": "transition",
+      "purpose": "Go back to the finger choice",
+      "transitionId": "change-finger-worn"
     },
     {
       "id": "enter-ring-worn",
@@ -3925,39 +3982,207 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
       "type": "transition",
       "purpose": "Explain that hand data cannot be read",
       "transitionId": "tracking-denied"
+    },
+    {
+      "id": "show-next-page",
+      "type": "increment",
+      "purpose": "Tip right: next item at this menu level, as on the ring",
+      "binding": "state.menu.index",
+      "value": 1
+    },
+    {
+      "id": "show-previous-page",
+      "type": "increment",
+      "purpose": "Tip left: previous item at this menu level, as on the ring",
+      "binding": "state.menu.index",
+      "value": -1
+    },
+    {
+      "id": "open-item",
+      "type": "custom",
+      "purpose": "One click in the air: open the item, as on the ring",
+      "binding": "state.menu"
+    },
+    {
+      "id": "go-back",
+      "type": "custom",
+      "purpose": "Two clicks in the air: go back a level, as on the ring",
+      "binding": "state.menu"
+    },
+    {
+      "id": "button-next",
+      "type": "increment",
+      "purpose": "Right arrow: same as tipping right",
+      "binding": "state.menu.index",
+      "value": 1
+    },
+    {
+      "id": "button-previous",
+      "type": "increment",
+      "purpose": "Left arrow: same as tipping left",
+      "binding": "state.menu.index",
+      "value": -1
+    },
+    {
+      "id": "button-confirm",
+      "type": "custom",
+      "purpose": "Confirm button: same as one click in the air",
+      "binding": "state.menu"
+    },
+    {
+      "id": "button-back",
+      "type": "custom",
+      "purpose": "Back button: same as two clicks in the air",
+      "binding": "state.menu"
     }
   ],
   "dataCases": {
     "normal": {
-      "activePageIndex": 0,
-      "pages": [
-        {
-          "id": "gem",
-          "assetId": "page-gem"
-        },
-        {
-          "id": "clock",
-          "assetId": "page-clock"
-        },
-        {
-          "id": "pet",
-          "assetId": "page-pet"
+      "finger": "index",
+      "menu": {
+        "root": "home",
+        "levels": {
+          "home": [
+            {
+              "frame": "idle",
+              "opens": "ambient"
+            },
+            {
+              "frame": "home-pet",
+              "opens": "pet"
+            },
+            {
+              "frame": "home-game",
+              "opens": "game"
+            },
+            {
+              "frame": "home-exercise",
+              "opens": "exercise"
+            },
+            {
+              "frame": "home-rhythm",
+              "opens": "rhythm"
+            },
+            {
+              "frame": "home-settings",
+              "opens": "settings"
+            }
+          ],
+          "ambient": [
+            {
+              "frame": "idle-gem",
+              "opens": "face-gem"
+            },
+            {
+              "frame": "idle-clock",
+              "opens": "face-clock"
+            },
+            {
+              "frame": "idle-rest",
+              "opens": "face-rest"
+            }
+          ],
+          "face-gem": [
+            {
+              "frame": "face-gem-dragon"
+            }
+          ],
+          "face-clock": [
+            {
+              "frame": "face-clock-network"
+            }
+          ],
+          "face-rest": [
+            {
+              "frame": "face-rest"
+            }
+          ],
+          "pet": [
+            {
+              "frame": "pet-egg"
+            }
+          ],
+          "game": [
+            {
+              "frame": "game-menu",
+              "opens": "starship"
+            },
+            {
+              "frame": "game-menu-dice",
+              "opens": "dice"
+            }
+          ],
+          "starship": [
+            {
+              "frame": "game-play"
+            }
+          ],
+          "dice": [
+            {
+              "frame": "dice-ready"
+            }
+          ],
+          "exercise": [
+            {
+              "frame": "exercise-walking"
+            }
+          ],
+          "rhythm": [
+            {
+              "frame": "rhythm-menu",
+              "opens": "stars"
+            },
+            {
+              "frame": "rhythm-menu-wave",
+              "opens": "wave"
+            },
+            {
+              "frame": "rhythm-menu-circuit",
+              "opens": "circuit"
+            }
+          ],
+          "stars": [
+            {
+              "frame": "rhythm-strike"
+            }
+          ],
+          "wave": [
+            {
+              "frame": "wave-beat"
+            }
+          ],
+          "circuit": [
+            {
+              "frame": "circuit-beat"
+            }
+          ],
+          "settings": [
+            {
+              "frame": "settings"
+            }
+          ]
         }
-      ]
+      }
     },
     "fallback": {
-      "activePageIndex": 0,
-      "pages": [
-        {
-          "id": "gem",
-          "assetId": "page-gem"
+      "finger": "thumb",
+      "menu": {
+        "root": "pet",
+        "levels": {
+          "pet": [
+            {
+              "frame": "pet-egg"
+            }
+          ]
         }
-      ]
+      }
     },
     "error": {
       "trackingAvailable": false,
-      "activePageIndex": 0,
-      "pages": []
+      "menu": {
+        "root": "pet",
+        "levels": {}
+      }
     }
   },
   "nodes": [
@@ -3971,8 +4196,11 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
       },
       "children": [
         "ring-on-hand",
+        "finger-panel",
         "hand-hint",
-        "tracking-message"
+        "tracking-message",
+        "gesture-guide",
+        "control-panel"
       ]
     },
     {
@@ -3982,11 +4210,16 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
       "purpose": "The ring worn on the finger; its screen shows the active page and follows the finger's tilt",
       "assetId": "ring-model",
       "props": {
-        "joint": "ring finger, first segment above the palm",
-        "fallbackJointWhenLost": "keep last pose for 0.3 s, then hide",
-        "displayScale": 1.5,
-        "tiltTriggerDeg": 25,
-        "tiltResetDeg": 10
+        "joint": "first segment of the chosen finger, on whichever hand is raised",
+        "lostHandDelayMs": 300,
+        "displayScale": 3.5,
+        "tipEnterDeg": 25,
+        "tipExitDeg": 10,
+        "tipHoldMs": 80,
+        "doubleClickWaitMs": 450,
+        "clickQuietMs": 300,
+        "tipResettleMs": 1500,
+        "nextDipGapMs": 120
       },
       "parts": {
         "band": {
@@ -4006,20 +4239,211 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
         }
       },
       "bindings": {
-        "pages": "data.pages",
-        "activePageIndex": "state.activePageIndex"
+        "menu": "data.menu",
+        "cursor": "state.menu",
+        "finger": "state.finger"
       },
       "events": {
         "handFound": "enter-ring-worn",
         "handLost": "leave-ring-worn",
         "trackingDenied": "enter-tracking-unavailable",
-        "tiltForward": "show-next-page",
-        "tiltBack": "show-previous-page"
+        "tipRight": "show-next-page",
+        "tipLeft": "show-previous-page",
+        "airClick": "open-item",
+        "airDoubleClick": "go-back"
       },
       "visibleInStates": [
         "ring-worn"
       ],
       "accessibilityLabel": "Gemtronic ring"
+    },
+    {
+      "id": "finger-panel",
+      "kind": "text",
+      "content": "Tap the finger wearing the ring",
+      "textStyle": {
+        "typography": "title",
+        "color": "labelPrimaryLight"
+      },
+      "layout": {
+        "mode": "column",
+        "gapDp": 16,
+        "paddingDp": 24,
+        "widthDp": 440
+      },
+      "appearance": {
+        "fill": "ringScreenBase",
+        "radiusDp": 24,
+        "foreground": "labelPrimaryLight"
+      },
+      "children": [
+        "hand-picker",
+        "wear-button"
+      ],
+      "visibleInStates": [
+        "finger-choosing"
+      ]
+    },
+    {
+      "id": "hand-picker",
+      "kind": "domain_visual",
+      "rendererKey": "hand-picker",
+      "purpose": "Choose the finger by tapping it on a hand shape; no other control can show this",
+      "props": {
+        "fingers": [
+          "thumb",
+          "index",
+          "middle",
+          "ring",
+          "little"
+        ],
+        "default": "index",
+        "widthDp": 392,
+        "heightDp": 420
+      },
+      "parts": {
+        "palm": {
+          "appearance": {
+            "fill": "handSkin",
+            "radiusDp": 32
+          }
+        },
+        "finger": {
+          "appearance": {
+            "fill": "handSkin",
+            "radiusDp": 28
+          },
+          "states": {
+            "selected": {
+              "fill": "labelPrimaryLight"
+            }
+          }
+        },
+        "ringMark": {
+          "appearance": {
+            "fill": "ringScreenBase"
+          }
+        }
+      },
+      "bindings": {
+        "selected": "state.finger"
+      },
+      "events": {
+        "tapFinger": "select-finger"
+      },
+      "accessibilityLabel": "Hand shape for choosing a finger"
+    },
+    {
+      "id": "wear-button",
+      "kind": "spatialui",
+      "component": "sui-button",
+      "content": "Put on the ring",
+      "events": {
+        "click": "confirm-finger"
+      }
+    },
+    {
+      "id": "gesture-guide",
+      "kind": "text",
+      "content": "Same gestures as the real ring",
+      "textStyle": {
+        "typography": "title",
+        "color": "labelPrimaryLight"
+      },
+      "layout": {
+        "mode": "column",
+        "gapDp": 16,
+        "paddingDp": 24,
+        "widthDp": 380
+      },
+      "appearance": {
+        "fill": "ringScreenBase",
+        "radiusDp": 24,
+        "foreground": "labelPrimaryLight"
+      },
+      "children": [
+        "ring-mirror",
+        "guide-next",
+        "guide-previous",
+        "guide-open",
+        "guide-back",
+        "guide-click",
+        "change-finger-button"
+      ],
+      "visibleInStates": [
+        "hand-searching",
+        "ring-worn"
+      ]
+    },
+    {
+      "id": "ring-mirror",
+      "kind": "domain_visual",
+      "rendererKey": "ring-mirror",
+      "purpose": "A large live copy of the ring's screen, which is too small to read at arm's length",
+      "props": {
+        "sizeDp": 200
+      },
+      "bindings": {
+        "cursor": "state.menu"
+      },
+      "accessibilityLabel": "Large copy of the ring screen"
+    },
+    {
+      "id": "guide-next",
+      "kind": "text",
+      "content": "Next: tip the ring down to the right",
+      "textStyle": {
+        "typography": "body",
+        "color": "labelPrimaryLight"
+      }
+    },
+    {
+      "id": "guide-previous",
+      "kind": "text",
+      "content": "Previous: tip the ring down to the left",
+      "textStyle": {
+        "typography": "body",
+        "color": "labelPrimaryLight"
+      }
+    },
+    {
+      "id": "guide-open",
+      "kind": "text",
+      "content": "Open: click once in the air",
+      "textStyle": {
+        "typography": "body",
+        "color": "labelPrimaryLight"
+      }
+    },
+    {
+      "id": "guide-back",
+      "kind": "text",
+      "content": "Back: click twice in the air",
+      "textStyle": {
+        "typography": "body",
+        "color": "labelPrimaryLight"
+      }
+    },
+    {
+      "id": "guide-click",
+      "kind": "text",
+      "content": "To click in the air, dip your hand sharply and stop.",
+      "textStyle": {
+        "typography": "body",
+        "color": "labelPrimaryLight"
+      }
+    },
+    {
+      "id": "change-finger-button",
+      "kind": "spatialui",
+      "component": "sui-button",
+      "content": "Change finger",
+      "props": {
+        "variant": "secondary"
+      },
+      "events": {
+        "click": "change-finger"
+      }
     },
     {
       "id": "hand-hint",
@@ -4063,6 +4487,86 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
       "visibleInStates": [
         "tracking-unavailable"
       ]
+    },
+    {
+      "id": "control-panel",
+      "kind": "text",
+      "content": "Controls",
+      "textStyle": {
+        "typography": "title",
+        "color": "labelPrimaryLight"
+      },
+      "layout": {
+        "mode": "column",
+        "gapDp": 16,
+        "paddingDp": 24,
+        "widthDp": 300,
+        "align": "center"
+      },
+      "appearance": {
+        "fill": "ringScreenBase",
+        "radiusDp": 24,
+        "foreground": "labelPrimaryLight"
+      },
+      "children": [
+        "control-arrows",
+        "confirm-button",
+        "back-button"
+      ],
+      "visibleInStates": [
+        "hand-searching",
+        "ring-worn"
+      ]
+    },
+    {
+      "id": "control-arrows",
+      "kind": "layout",
+      "layout": {
+        "mode": "row",
+        "gapDp": 16
+      },
+      "children": [
+        "previous-button",
+        "next-button"
+      ]
+    },
+    {
+      "id": "previous-button",
+      "kind": "spatialui",
+      "component": "sui-icon-button",
+      "assetId": "icon-arrow-left",
+      "events": {
+        "click": "button-previous"
+      },
+      "accessibilityLabel": "Previous"
+    },
+    {
+      "id": "next-button",
+      "kind": "spatialui",
+      "component": "sui-icon-button",
+      "assetId": "icon-arrow-right",
+      "events": {
+        "click": "button-next"
+      },
+      "accessibilityLabel": "Next"
+    },
+    {
+      "id": "confirm-button",
+      "kind": "spatialui",
+      "component": "sui-button",
+      "content": "Confirm",
+      "events": {
+        "click": "button-confirm"
+      }
+    },
+    {
+      "id": "back-button",
+      "kind": "spatialui",
+      "component": "sui-button",
+      "content": "Back",
+      "events": {
+        "click": "button-back"
+      }
     }
   ],
   "responsiveRules": [],
@@ -4075,58 +4579,229 @@ window.SUI_COMPONENTS = ["sui-text","sui-icon","sui-button","sui-icon-button","s
       "alt": "Gemtronic ring"
     },
     {
-      "id": "page-gem",
+      "id": "frame-idle",
       "kind": "image",
-      "src": "page_gem.png",
-      "purpose": "Firmware screen: dragon gem face",
-      "alt": "Dragon gem"
+      "src": "pages/idle.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Idle"
     },
     {
-      "id": "page-clock",
+      "id": "frame-home-pet",
       "kind": "image",
-      "src": "page_clock.png",
-      "purpose": "Firmware screen: idle clock",
-      "alt": "Clock"
+      "src": "pages/home-pet.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Home pet"
     },
     {
-      "id": "page-pet",
+      "id": "frame-home-game",
       "kind": "image",
-      "src": "page_pet.png",
-      "purpose": "Firmware screen: pet",
-      "alt": "Pet"
+      "src": "pages/home-game.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Home game"
+    },
+    {
+      "id": "frame-home-exercise",
+      "kind": "image",
+      "src": "pages/home-exercise.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Home exercise"
+    },
+    {
+      "id": "frame-home-rhythm",
+      "kind": "image",
+      "src": "pages/home-rhythm.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Home rhythm"
+    },
+    {
+      "id": "frame-home-settings",
+      "kind": "image",
+      "src": "pages/home-settings.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Home settings"
+    },
+    {
+      "id": "frame-idle-gem",
+      "kind": "image",
+      "src": "pages/idle-gem.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Idle gem"
+    },
+    {
+      "id": "frame-idle-clock",
+      "kind": "image",
+      "src": "pages/idle-clock.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Idle clock"
+    },
+    {
+      "id": "frame-idle-rest",
+      "kind": "image",
+      "src": "pages/idle-rest.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Idle rest"
+    },
+    {
+      "id": "frame-face-gem-dragon",
+      "kind": "image",
+      "src": "pages/face-gem-dragon.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Face gem dragon"
+    },
+    {
+      "id": "frame-face-clock-network",
+      "kind": "image",
+      "src": "pages/face-clock-network.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Face clock network"
+    },
+    {
+      "id": "frame-face-rest",
+      "kind": "image",
+      "src": "pages/face-rest.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Face rest"
+    },
+    {
+      "id": "frame-pet-egg",
+      "kind": "image",
+      "src": "pages/pet-egg.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Pet egg"
+    },
+    {
+      "id": "frame-game-menu",
+      "kind": "image",
+      "src": "pages/game-menu.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Game menu"
+    },
+    {
+      "id": "frame-game-menu-dice",
+      "kind": "image",
+      "src": "pages/game-menu-dice.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Game menu dice"
+    },
+    {
+      "id": "frame-game-play",
+      "kind": "image",
+      "src": "pages/game-play.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Game play"
+    },
+    {
+      "id": "frame-dice-ready",
+      "kind": "image",
+      "src": "pages/dice-ready.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Dice ready"
+    },
+    {
+      "id": "frame-exercise-walking",
+      "kind": "image",
+      "src": "pages/exercise-walking.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Exercise walking"
+    },
+    {
+      "id": "frame-rhythm-menu",
+      "kind": "image",
+      "src": "pages/rhythm-menu.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Rhythm menu"
+    },
+    {
+      "id": "frame-rhythm-menu-wave",
+      "kind": "image",
+      "src": "pages/rhythm-menu-wave.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Rhythm menu wave"
+    },
+    {
+      "id": "frame-rhythm-menu-circuit",
+      "kind": "image",
+      "src": "pages/rhythm-menu-circuit.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Rhythm menu circuit"
+    },
+    {
+      "id": "frame-rhythm-strike",
+      "kind": "image",
+      "src": "pages/rhythm-strike.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Rhythm strike"
+    },
+    {
+      "id": "frame-wave-beat",
+      "kind": "image",
+      "src": "pages/wave-beat.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Wave beat"
+    },
+    {
+      "id": "frame-circuit-beat",
+      "kind": "image",
+      "src": "pages/circuit-beat.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Circuit beat"
+    },
+    {
+      "id": "frame-settings",
+      "kind": "image",
+      "src": "pages/settings.png",
+      "purpose": "Firmware screen from the ring's menu",
+      "alt": "Settings"
+    },
+    {
+      "id": "icon-arrow-left",
+      "kind": "icon",
+      "src": "icon70://7.0/ic_arrow_left",
+      "purpose": "Previous item",
+      "alt": "Previous"
+    },
+    {
+      "id": "icon-arrow-right",
+      "kind": "icon",
+      "src": "icon70://7.0/ic_arrow_right",
+      "purpose": "Next item",
+      "alt": "Next"
     }
   ]
 }</script>
-<script id="pico-images" type="application/json">{"page-gem": "data:image/png;base64,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", "page-clock": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACU0lEQVR42u3czW3qQBSA0WGUBYs0QQupC7kCL6kAUVdaoJUsIlnIZiybKHh853yrB49HlHd0/TeGw/HzmBS37L8AsAALsAALsAALMGABFmABFmABFmDAAizAAizAAizAAgxYgAVYgAVYgAUYsAALsAALsABrto8Yv8btenl8eO760ZO/zwwvfnxYepPRvwK8ZYPoiGR4WEKNJ9roJvrc9dMBtQ+WfXCsSrttwCnSvtwmWoAF+M0713ib3yUdYnzb7NoLHaXT6Hi75IOvE7aJFmABFmABFmABBizAAqxkPfgd3e/fT58/nb6SxYaQtO0whwVeQtsCc0zgqe7Ub8lrAO9Ad55t1YsB16Vbmtr5aQ5mnNvRXbgDXrvzBrxBL0xh1IOs3Oxh83veCnAV4xt4iLPxjT3E2fjGHuIWFxuCHScniw0NXt+wXGiCnR+bYAHe2QFUvOOvbNsbe2OenQXFPn3KDqBiH4tllzJiX/3IUc+CVoEFXvB3y45bdtx0B9hts4Dd+A7YR1cAy3mwAAMWYAEWYAEWYAEGrOS+6FTbwl/pE/v/sYA4/+0A1V7WNsEmeNPZ/fvELHmf135W5bNrgk1wav3zRbueXRNsgrXn2TXBJliFvbJ9sEzwHvaCpZ+1ozk2wclts7Vfi37ts2iuRcsEy1G0AAuwAAswYAEWYAEWYCUL/qnJr75yR8fzbtfL8Odz1y/8K5toARZgJevBDrIs+MsmGrAAC7AAC7AACzBgARZgARZgARZgAQYswAIswAIswAIMWIAFWIAFWIAFGLBC9wMr2uttRSRgjQAAAABJRU5ErkJggg==", "page-pet": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAAELklEQVR4nO2cy43jQAwFPcYc5rBJMAXnH4NTYCoLrDGz2vVPlvvzWHp1NuAWSyRbrW59fP36Ohgux9kDMH2xYDgWDMeC4VgwHAuGY8FwLBiOBcOxYDgWDMeC4VgwHAuGY8FwLBiOBcOxYDgWDMeC4VgwHAuGY8FwLBiOBcOxYDgWDMeC4VgwHAuGY8FwLBiOBcOxYDgWDMeC4VgwHAuGY8FwdAVnnmcPgcCH5ofQlnYjTlPHUhvRDLZUuOAlrtVwwXbMFPxflXYe0wRfG7VjlOCb8yw75gg2fMFOYrjge2SepWp1io2nvGCzC8FqSZNi4ykvWISU9FpG8ONFafHgKqAu+Cl2XF7w0zdLEx2nfAkpIJgR6FnUEFzl9XDq3Wc1BGuuNqSezsKCqyTxjgRfUspZxc/gEqWs1UWpXexxTFEdmcpzQxxiraT7ttmb4d4chfXyegc6749EyvFx1jtdtVL2EoUGP6IH37uju4apkAPCY9IDx/2yOe148NGVpxFf0702aIumTXHNAHTa8FHttUGPtMsdp7LiSlYnx7lLzRNOF77/qNNVVbTYYqBToj/H/2XEaWWYLj8bHKz8d2w6qoqdD341C68DPazkxqZTUiJ3xrQe/Or1z922kWUPpM+cZG1wLLI7J+JURfPkWfSGMIk4PhRJ5QmTrPdRcBwV7Ap9hKXoQ2p8a74ev8gdoLjQUYj8nhaI6NQVLBugNSg7VhFcnbxyLNJ0VHqwWlyatGSFnJbLYIWgkD4cI5fBCkEZud7+8/vDTjK4ehJfyDyLXIWi4LbEn2XF8eEWcaxYotvW6pj3xbzLXz/+x943gXQG97j4GJ5Vc/NYWnD1iGeLTYZwwZ1CEAKOx4xBuge36p1xP5RTHslGFm31DB6QytE/3Mu/GNySywjuGpoYFfTxE65KgrsSY/N4GLsQnKv3QQKKRI0tOxOXo2PF6kQhFDNY4XhStE64WVtCRTO4B/niO9oH+63eHMPIir0jwVLvAIbtpJde6Ohd06LFVzBX9uwHb4i7Cv4kvTZvWDBz1NGp3uVEWvAwkjJnrjGLXlLoFNCG3u+3SX8DIWs6b2X/lHZbb5JVqKLGuh3RP7OKYaZLCpbVvH7KbcFCmqPprq7BVdqz6OfLWPeOBZcoIYVL9LZ5TX63wMe98KWvnU1f6N6F4Pc3ueWmjNzw9smC32XlPDab7rvW+dQxNoOXaDbI8HMw1XRMWqVRX6p8nxBY/5o4BmyJ3ucu6L0LHmxaoXjsVHA/5QpSl1jwc5ZLx3PPgm7AguHwZ9E7x4LhWDAcC4ZjwXAsGI4Fw7FgOBYMx4LhWDAcC4ZjwXAsGI4Fw7FgOBYMx4LhWDAcC4ZjwXAsGI4Fw7FgOBYMx4LhWDAcC4ZjwXAsGI4Fw7FgOBYMx4LhWDAcC4ZjwXAsGI4Fw7HgA5vfih2+wxZ5uzYAAAAASUVORK5CYII="}</script>
-<script type="module">
-const surfaceOwners = {"hand-hint": el => { el.dataset.designSurface = "hand-hint"; },"tracking-message": el => { el.dataset.designSurface = "tracking-message"; },};
+<script id="pico-images" type="application/json">{"frame-idle": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACRUlEQVR42u3cwVHyQBiA4SXjgYNN0IJ1MakgRypgqMsWaMUDM0xMwk6UDSHfPs8JUfD/ff02K4nu9p/7RFyNL4HACIzACIzACIzAAiMwAiMwAiMwAguMwAiMwAiMwAiMwAIjMAIjMAIjMAILjMAIjMAIjMBkfQT4P1zOp2PbTb55OZ/u9/fvnPz4/gcPHiLwxsI/EqCoJfrXZI+nVmAs0etN5EzHtrs95H4jc8wWeH2DY22R5zHBcb4nHIMRGEv06xfhv26aBsfvAMv4zp8TtkQjMAIjMAIjMAILjMAITPJadBnX63fx5zwcvkwwAmOJfqt1dYnV3gQjMJboyZU2xmbYBCOwJdp22gQjMAIjMAIjcAr6CrPAE3XHjWuo3lQ1u+Pb4Rs3ta3MlXStepM1qBs7dmNjZYLj1w38reBkgwlGYCzRNlYmGIFJ/owSJlhgBEZgBEZgBEZggRGY5GxSeubMT/8s/e294/P2/fsfnTt69Kj850rZawee+feseA2CCTbBi81ufhqen9f+/fkpLDVhc1YgE0xNV3SMJ2/dazbeZC5NMIGuycrvkMs+z5xjuQmm1p+D//cT5JxddNlr5d9hN2CCWXuC57zetJUdvgnGLnrJXfT4d/vnrx+b/j02E5xc+E4ywQiMwAiMwAgsMAIjMAKTaj/ZUOqKHIE36XI+3W8f226td1miERiBSfHOB9tkOeGPJVpgBEZgBEZgBEZgBBYYgREYgREYgRFYYARGYARGYARGYIERGIERGIERGIERuA4/9B7f25bGghQAAAAASUVORK5CYII=", "frame-home-pet": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACfklEQVR42u3cQW6qUBSA4Stx4KCbYAuuy7gCh67AuC63wFY6ICEUBLE1Ws75/pGPp03e+3oAuehm97UrilvlvwCwAAuwAAuwAAswYAEWYAEWYAEWYMACLMACLMACLMACDFiABViABViABRiwAAuwAAuwAGu2bYB/w/VyPhxPd/94vZy77f2Nd5/ff/LgJYBXBj9VAFG76B+TPZ5awLKL/txELuxwPLUv6R7MHLMBf77BsfYlP8cEx/mdcAwWYNlFv38n/OxJ0+D4HWA3vvF1wnbRAizAAizAAizAgAVYgAX4czXNDbAAr3NS240ZhriyNwYcxLhjTuUdfz34IWdd74s7OjL8BoSUrnKOb13vYw9uigke645R63of+5BcpdVtmlu7JfYoRzvJmhnHPuT4uNtuiYe9Tf5ON6prtF30Q6GpJ3Tb2wfxjsdxjsGvmsJgxqFOsn7x5qc71Zq67AV4HaP8EKz/hEjvkmO+TXpoPDj0Br5yGfZa9Mw1rFRXK8Ne6JiiGsPHvpK1tcxQLBemwgu2l468mvTsyXDI61kW/IOv+Wf5hP/CRQjAcYyTLPgnui+6L5pEN+mN73l0MwKn0vU1SiZYgAVYgAVYgAUYsAALsIp7sso7bp2cX/Bf8omVVV++NsEmuKxvgWj8mcH5KRxPvE82CLAAyzH4NV+2suQ5Jlgm+L/eZpXtViwTDFiA5Ri8yg/8m2AVN77LBAuwAAswYAEWYAEWYAFWyXrje9qF/XUDXy/n7vHhePr7q17+V3bRAizAKqnWg51kWfC3ixZgARZgARZgARZgwAIswAIswAIswIAFWIAFWIAFWIAFGLAAC7AAC7AACzBgBeobITjXoM80lWMAAAAASUVORK5CYII=", "frame-home-game": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACTUlEQVR42u3cTXKqQBSA0dbKwEE2wRZcF8UKGLoCy3W5BbaSgVUUglCdBH/6cr5RXqKm8o4XWgF3h+9DUtz2/gsAC7AAC7AAC7AAAxZgARZgARZgAQYswAIswAIswAIswIAFWIAFWIAFWIABC7AAC7AAC7AW+wrwN1zOp7ppH/7zcj713x9+8+Hthzce3QVwYfBzBRC1ib6b7OnUApZN9PsmMrO6aW936b9Y2GcDfn+jfe0qj2OC4zwn7IMFWDbRr98I/3bRNNp/B9iM73ycsE20AAuwAAuwAAswYAEWYAEWYAEWYMBKDviXVdddM29ZVUfAkWlvtw/JvI+tW1XHBbb+R0NmwEFm9xl3T87Jeo3u3NRO/R7ObqRt9XZPfJ97TgQb4v3GF1lW0WUbZ66euu4a1dgbHXdPCIussOvnqBttE5y8Fy3AAlzQDjjSassEJ4cLCy5nMRzyGEN84PzXOYEPJcV8Hfyfl7CrPAhgWWQJsAALMGABFmABFmABFmDAAizAAqzkjI6UeYVg/m3mLvfOv9qloNMBTLAJ/sjryZYnb/k2+fMa4MQdE2yCU5wTKJc/fsVndMgEf9JaupTfYoK1vQmeroef8Rl3VtEywZ+xro59hZkJNsHlzOUrZzHAO1wmOHiuLrQPFmABFmABFmABBizAAqzkYEMq+5wewOt0OZ/6r+umzfzR6g/4t99lEy3AAqy0qePBFlkO+NtEC7AAC7AAC7AAAxZgARZgARZgAQYswAIswAIswAIswIAFWIAFWIAFWIABC7BK6wcde9FYaOpnrwAAAABJRU5ErkJggg==", "frame-home-exercise": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAAChUlEQVR42u3cwW3CQBBG4cXKgUOaoAXqQlTAkQoQddGCW8kByXJsYq2BGJj53gkcYwiPf2ZZL16tv9cFcWm8BQSDYBAMgkEwCAbBBINgEAyCQTAIBsEEg2AQDIJBMAgGwSCYYBAMgkEwCAbBIJhgEAyCQTAIBsGY5CvA/3A+HXf7w82759Ox297feHP//s6DhxD8YeL/IoBRJfpXssepJRhK9OsSWcluf7g+pLsx0bMJfj2DXvuU40hwnM+EHgyCoUQvX4TnDpoG/TtAGV+5nLASDYJBMAgGwSAYBBMMgkEwCF6Ktr207SWh4BRz0X21m822u7vZbCU4iNebGzNkuoldkMcKM6Q2Vw9u20sndWD3ejd2jmP24IGzidSG78cxE9y3la0mlyRLdmZ5DfwhsGRHgjO1ZD04wrfhVFNaTTa72Rw3Ce2mcuxsEsFZI04weQSDYBAMgkEwwSC4xDxdSLAPAcEg+K0CmqSGNzmLcJ4OnWXJzuDHDcVPV6BEg2AQDIJBMAgmGASDYBCMEurXhdNLlPvXURjPEve31x+n5uxCzeU77tun/voQC8yKS7AEl/daPlFznJpKML3P3OrytktHJFiCF8x3Tc4s0ZJgvCLBNSPSmuw+a/T73KrzDq9HgiX41R2upgfXj1qX6eL1o3E9GHFH0XO/g943Mp/7GoyiIcF1c7b/d5xxju8b/Y7z/ci8t7loFAvfIcEEewsIBsEgGASDYBAMgglGcbKhxLlWeODLsnyG4PPp2N3e7Q+P/+npz6VEg2AQjOJ8sEGWE/5KNAgGwSAYBINgEEwwCAbBIBgEg2AQDIIJBsEgGASDYBAMggkGwSAYBINgEAyCCQbB+Ex+AF/9C7o4u/spAAAAAElFTkSuQmCC", "frame-home-rhythm": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACRUlEQVR42u3czW3iQBiA4QH5wCFNuAXqQlTAkQoQdaUFWskByXIGsMb82f7meU8sS5LdffabcbCd1eZnkxS3tX8CwAIswAIswAIswIAFWIAFWIAFWIABC7AAC7AAC7AACzBgARZgARZgARZgwAIswAIswAKswZoAf4fz6bjbH+7+8nw6ds/3n7z7+v6Lsw8BvDD4RwUQtUT/m+zbqQUsS/R0E1nYbn+4fkj3YGDPBjx92V77ls9jguP8n7AHC7As0d9fhMceNGX7d4BlfOXHCVuiBViABViABViAAQuwACt5L3qaLpff7Jm23Zrg4OS36oDjTzZgAZ5xbbvNdt9gQ9xUrps9iLdEN0mhj6XtwfZgARZgARbg5C0qwHTrAu5062ReO5cAmGjyVuViaGsjb0xt7ELdXfg0bdTrdbzREVw37P3BhaMcmzb+DeADzDXQVnGHfz2Xx1a6B2ectek6yAIc8co63wfLBAuwAAuwAAswYAEWYAEWYKV4F909OjnfP0Nwfc3tOYP+8+WvSYMnJ971tUywarps9jvTULIqjF17StYGEywXvqeZXlAw2zk2wSZ4ZhdBjj0GfmWXDXAXjAk2wZPuZ+VH2mM/zytH9Qu6kt4Em+BZzrFMsOb9fbA5NsFK7mwwwQIswAIswAIswAIMWICVnGxIfnAa4ILOp2P3eLc/fPS3nvtjWKIFWICVnA92kAXYEi3AAizAAizAAgxYgAVYgAVYgAVYgAELsAALsAALsAADFmABFmABFmABBizAWmZ/qmvWQashQZwAAAAASUVORK5CYII=", "frame-home-settings": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACcElEQVR42u3dTXKCQBRF4dZy4CCbcAtZl8UKGLoCy3VlC24lA6osAkIaofh5fGdkEE3I8b5HNx1yOH+dE+Jy9CsgGASDYBAMgkEwCCYYBINgEAyCQTAIJhgEg2AQDIJBMAgGwQSDYBAMgkEwCAbBBINgEAyCQTAIRi+nAMfwuN+uRfn2y8f99tpe3/h2//rOjZcQvDHxXQQwqkT/SXY7tQRDiV4ukZlci7J6yetBT88meHkavXaS95HgOJ8JPRgEQ4mevwgPPWlq9O8AZfzgdsJKNAgGwSAYBINgEEwwCAbBSOaiZ+L5/GlsuVy+JRgEQ4lesBr/W4cbpTte3T7G7rXt1ju0VRMMgqEHzzlAilqNd5HgkWdJ8U6yIq/Jys9o4EkPPTg4QRKcE9Z6TIfuL8Eb6807mYhWogkGwSB483PUzqKNgyUYEjxnancSZQl2PThtforjbS67thMMgkHwSuacw89Rn8JfV9jzIFiJVqKRTHRAgkEwCAbBIJhgEAyCQTAIRtrK1aSu1TDVxZz+tTLT7pNzY6Xq2faFpvb2nBs09R+7BGPdCe5Kw9BPdE7CcvZpJ/6zJOWkfMz7SzDco2Ou2rPaJSISLMFpmkVSn51tLpuG/D7a9ZPnH7sEY909OGdMuc4FjtOOsMd0dwkGwVP/jRPB2MdMVn5XnmdkWf9eY8a7/b15wVloCU4WvsNJFggGwSAYBINggkEwCAbBSBbdJf+BeB+CH/fb6/G1KJd6SokGwSAYyfVgJ1kEQ4kmGASDYBAMgkEwCCYYBINgEAyCQTAIJhgEg2AQDIJBMAgGwQSDYBAMgkEwCAbBBCMcv+qI4/HvI1JQAAAAAElFTkSuQmCC", "frame-idle-gem": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAAChUlEQVR42u3cv03DQBiG8cOiSMESXiElJRLbICagZALENkiUlKyQVSgsRZZjO0dCIu77fk8Vjosd5cl7f3xn32zuNgVx6XwFBINgEAyCQTAIBsEEg2AQDIJBMAgGwQSDYBAMgkEwCAbBIJhgEAyCQTAIBsEgmGAQDIJBMAgGwVjltolP+f72Wkp5en4Zl8z+OdTcM6lz+K9J4bi85viHZyH4FLuzX/oSS7+DpYMsHXP2dPuSyg+jiT431kupQhuCJxG8pssrny51H7wuYGJi/LqmFf1tfYIv1RTXi1/vR+uHSMNPp2nrt00kdX0kDPPgvD0xwS50NDt9WmreJ5dNjjb7TYf4xuOE9cEgGASDYBAMgkEwwSAYBIPg67LbfRMc3G42x13C7KZy3OVsmfM47tL2u0kcd5lHVRkcd8nHzOEdd2ZEsR135ruxHbuSVeyqbJLPj6/6yg+P9wQ3xuDsqObAakvsbbPjbnVW81ht32/1wc2nOVVwU2x8Pxwb9/12ttA0yXIhwf+PmmjGjq95sASHDnH4+EqwBMcNcYb4SjDBQUOcJL4STHDEEOeJrwQTHC7EqeIrwcVqEiQYBINgEAyCQTDBIBgEg2AU9yaVEze4V+6FHmoOdQ7XIZbKJRgS/HfZrUleTQrH7wpzD4QES3CJedNKTX8cIMcSLMFBx9I2vkOC/2u/e05egyVbgjXRIBj64Av2u+c8dNQjHFBsfIcEg2AQDIJBMMEgGASDYBCMYsG/nLuhh+BmeH973b9+en656Ls00SAYBKNYDzbIsuCviQbBIBgEg2AQDIJBMMEgGASDYBAMgkEwwSAYBINgEAyCQTDBIBgEg2AQDIJBMAgmGO3zA27O73gKbOPyAAAAAElFTkSuQmCC", "frame-idle-clock": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAAChklEQVR42u3cz23CMBiHYWNx4NAlukLnQkzAkQkQc3UFVukBCaEkTg0IiD8/74mGKKa8/Pw/WW2+Nglxyb4CgkEwCAbBIBgEg2CCQTAIBsEgGASDYIJBMAgGwSAYBINgEEwwCAbBIBgEg2AQTDAIBsEgGASDYMyybuJTno6HlNJ2t789Mvnn5cwrg3PGbw0O3h6vuf64FIIfsTv5pZco/Q5KFyldc7K465HKD6OKfjbWpVShDcGDCL7T5ZuL67oNnhcwMHH7uqYWvfd8gl9VFdeLn29H67tIl59O09bXTSR1vicM4+B+W2KCTXQ0O3wqVe+DaZN/q/2mQ7zyOGFtMAgGwSAYBINgEEwwCAbBSOai38H5/Dt5/Pv7J/z/HnwuuqS2H81hBdeo7UFzTMFju2N/NecQ3IDdeW13nUzwsuyWUjuf5mCOcz92Kxvgextvgj/AAymM2snK3Xab33MpghcR38AhzuIbO8RZfGOHuMfFhmD95GSxocP5DcuFEmx8LMEguLEOVLz+V1b3xq7Ms1FQ7OFT1oGK3RfLpjJiz37kqKOgu4QFXvC3ZceWHZvuCLZtlmAb3wl26wrBMA4GwQSDYBAMgkEwCAbBBCPZF52WtvBXumP/FQuI808HWOy0tgRL8Eez+3xiaq7zWFkLz64ES3Dq/f6iprMrwRKMlrMrwRKMQqusDYYEt9AKlspqKMcSnGybXfpc9GP3opmLhgRDLxoEg2AQDIIJBsEgGASDYCQL/qnLR1/Z0THN6Xi4vt7u9pVvqaJBMAhGsh6sk2XBH6pogkEwCAbBIBgEg2CCQTAIBsEgGASDYBBMMAgGwSAYBINgEEwwCAbBIBgEg2AQTDBC8wfVTyplak2L/QAAAABJRU5ErkJggg==", "frame-idle-rest": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAAC3ElEQVR42u3czW3yQBRG4QlikcXXhFugrigVZJkKotSVFmjlW1iyLBsPE8Lf3PucFQwjjDi8849fXv+9FsRl5ysgGASDYBAMgkEwCCYYBINgEAyCQTAIJhgEg2AQDIJBMAgGwQSDYBAMgkEwCAbBBINgEAyCQTAIRpV9F5/y++uzlPL2/jEvOfl0rDmxqLN+aVE4L295//VVCL7E7skvfYut38HWm2y958nLTSWNH0YT/ddYb6UKfQheRPCeLu98udR9cF3AwsT8cUsr+tv6BN+qKW4XX+9H24dI40+na+v7LpJaHwnDPDhvT0ywhY5up09bzfti2eRss991iF/cTlgfDIJBMAgGwSAYBBMMgkEwCH4cx+MPwSC4z6SOhRlCvNMaExzE8aQ5le/4+8FndQ7DoTjRkeEXENL0Lmd8h+EQO7gpEry2u5Y6DIfYXfIurd3j8WcsiR3laIOsShznItf97lgST/Y++Uw3qtdoTfRZQ1sVpvLxQbz+OE4ffK0UBnMcapB1weRnGmptLXsR3EeUzwqbV4g0S445TTrreNH1Bl65DLsWXVnDSrVaGXahY0vVWnzslay9bYZiuzCVvGCtdOTdpN8OhkOuZ9nwD77nn+Uf/o2bEATHcZxkwz/Ruei50SR2kx58z2M3o+BUdt1GSYJBMAgGwSAYBINggkEwCEZJfyar5e+d9Tpb/yyal7cfr7zWtep1JBj9J/i6afhLXp82eRKMDs9FX5aVdQpvd+C5u0xLsASXLDdkuay1aGlLHph4CZbgEuGwVUuG2nvulhH7k/TWEizBTzA/flQbUM90F/dtkWAJvllW6iPbljqQ4Ow4+C7BIBgEg2AQDIJBMMEgGASj2C4scU7zEHwPvr8+p8dv7x+NL2miQTAIRrEfbJBFMDTRIJhgEAyCQTAIBsEgmGAQDIJBMAgGwSCYYF8BwSAYBINgEAyCQTDBIBgEg2AQDIJBcFb+Ayg9VJ2e1cOxAAAAAElFTkSuQmCC", "frame-face-gem-dragon": "data:image/png;base64,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", "frame-face-clock-network": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAADPElEQVR42u3dTW7rIBRAYRpl0MHbRLbQdVVdQYddwdNb19tCt9KBJQthG+OfuGB/R5mUODjl+HKJIeTl9c9rwHm5aQKCQTAIBsEgGASDYIJBMAgGwSAYBINggkEwCAbBIBjXFvz9/Z+5Ql7aWlWZqH083ig8TwQPA1coz3I/8f8W649jfao8eW3y1GjJsJ6+sJLe5d6Ep66xHo+30SAebcqkvP9zqnxF5zFVz+j7JDjXpnFYHJCGR+U1mg5ubY2TCwNui/jhKZZWVdWl0HYOLu9dp/rP1dfBVEzXNrC/V5txdwnQ2bHSupScH7gRPNOz5Rur3MEiWz4H1xXlsxGzwu4pL4ibu4/b7dZ8ZVR0q3KF40yzDmsb3otICjM3PfL11Bz3DQuWXxvLwYQZZLkazj5dCCs6QDDBIBgEg2AQDIJBMMEgGASDYBAMgkEwCCYYBINgEAyCQTAIJhgEg2AQjHDOPTpKvgd85JcHn/1+dtnURwSDYIIhBx+Uhwo3hN24/d0xx4tgEAyCcbkd3w/et6tkg3kRDIJBMI7Owc/ISU/6tYZF7/l37zOLYBBMMOTgZ/1UyrpjtvwKzl7zvvXMDYtgXTQIhhxc79qlLed6xlyyCAbBIFgOPnqedWl+2it31rZOWwSDYBAc/DAWRDAIBsEgGASDYIJBMAgGwSAYBINggmvl39+v/tH9GT81WpKvZ3hkXBgfk6kqU3OwZGeR3fePz33rmaqz5JhRuyWvEsFb/e1bYcZToXiCSxu6pAPsDts3I/xKT3PFXXYKO8BZx4XOulMsEly/3ZOMovOt/P7x2T0OPq8ILk2uXTvGkbqlZYf1FPbz/dB93/cTLLqDGx0gmGAQDIJBMAgGwSAYBBMMghHMJoX65qni+eYwPRUdimemCa50qVdSEq/E61cBdJODzdltT3DJxG1m8VSLhi4XwXlJG5doxRdBP6Xfbvi22kVnsuYwceYXihQu1Go39K+Vg5Pr4Ao9to9JM0m6H2FVvv75VBE8u4xyX+XJcJrgxr7NEGxleL67HKOBngRo8u2jVhZCWzYb3IsGwSAYBINgEAyCCQbBIBgEg2AQDIJBMMEgGASDYBAMgjHkBwYf2HkDxaseAAAAAElFTkSuQmCC", "frame-face-rest": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAADJElEQVR42u3dPW7UQBiH8Y21RQouYYkT5AZQ0iLRUEZUnIcKUdIgcZWcAMlXobCELC+e2Ouvd2Z+T5nd2JEf/+edLzsPj28eLyiXxiUgGASDYBAMgkEwCCYYBINgEAyCQTAIJhgEg2AQDIJBMAgGwQSDYBAMgkEwCAbBBINgEAyCQTAIBsEEg2AQDIJxNFeXYFvat23i0+5PJ8GQ4MBMZTSdbAmGBMeuysdX36oT3HUvEoy8s1tvgvv4VhJiCS42u5UmuJ7q2/OQ9f9s6LqXtn1aY3fRr+eV3UISXFsia6zBveNXs3jkrTA1b2UuepXmOxRua/3rl2cJPqcqHxbfD+/eT3307fsPgrdssY8vz1MKT0x23k10ou7Ot1t2N81Ex4Ju2t1V+ZTGmeBUlPeQTXBRmT49uyXUYLMcxSY4stog2c1VsNSWLDi43VDZtelOgsV30xnpU5ItwRcL/lXHd/5Q+Pevn4lPP376rImO2CAv3TSiBhc7/pnKaDrZ5QveyeswdqMFxFNWEisVvMeFjrN3p8/uWdU3RC96+02NMw449Z2pn2cd92uERfutrmDCXPoUwy/0B1n5J0XIbqBxcNs+ReupWg8OHeX0KfqRzzCyrz6tNMp3FtmNOJO1a25Ga/h9szHsWu+3OVeCD81xIqzzNd9+OVp2485F71GSh12n4cFHOS5vZib6XPTSi5i+M/5bStM/nH8ic9Hnt9j/cjw65vwGI7vedR6rSYscr6mjidNlOnAqc7lwpYwDHiO24H/aFHdh6xCNVzVc7OjI3dn8Brak6mtPVhWhz+wlLJuHeM4BJTjXyeoa6nRTbStayRPiV/VVgknK+P5o2C3bccPuxbbZsF3oXcXfrh7m+JRD9i8jteNOL7pStYW/CI3dQuaiA+6pVoNPLsm3zy4UfIsUJfju/XISXIjjChtz68EEGwIRzC7BIFh8Cb7DaOXTII3sGgdDgkEwCAbBIBgEEwyCQTAIBsEgGAQTDIJBMAgGwSAYBINggkEwCAbBIBgEg2CCQTAIBsEgGASDYIJBMAgGwSAYBINgEEwwCAbBIBgE407+AuqpXbROkQKYAAAAAElFTkSuQmCC", "frame-pet-egg": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAADiUlEQVR42u3dzW3jMBBAYYXQIYdtwi2kriAV5JgKgtSVFtzKHgwEhiTLkiXbw+H34Msaa1Hg4wx/RCovr/9eO+SlqAKCQTAIBsEgGASDYIJBMAgGwSAYBINggkEwCAbBIBgEg2AQTHBjHI+/BHNMMLUEg2ChTDCpBLdsN4/g4/H39KE8eQTfICZx+OYRfDi8DaKZ3eR9cHpzBlndxl45RxMpLY+QW4jylzQvYbmTrfPeXQRHGWfhj14VLEwMlTYggpObJnhTZx9ftrVo82ArGzXPlXtejaIzq53sRDM1mr5Bu1dHRoNHF/rgauweDm9rx721r580NE1aomrQdE4/ORze6o3jwu5MYqh9GasVwbfZHfzQUmWeudYllzXm6t6YefyfT8Ut/OHx+Bs5uHvLF4Oy5oueDOLIjnvLUmtvoK5E3ZM6f2N/OisdZJV6N8XZPWKadN2EfdEVx8EjVyXDNpQi1+W+8xKhpu5RWY8XEDOIi4DI7bhIevvqiTY1KI13bHcqMY7mEnDwskul31a/g6I3Llrtfiw9zzw4Qpe84z080XGJPA/ZWMXbn0HNPPBfdfEnttdiujnYYrdjiac2+txsVHIvKWzpiTcmgCATv5rOB+8ybrrh4qvyc7QJfUm/OriwWcxs06l6uaZYJ5rRk+DcQ2WvcHjY5qxdMnlnR4cT3FL0Q6MwWfi2ewC8nUOnxZP27Q8PIuf8Wt+Tdb/DwXWtRErRj2g9kRM+wck79SpT9L61OUiwT59qmwcbUecV7J061qLdoUFWS477NH+n4Yk3EDm19Nawtt9M5PdqeeN78hMY+uDk52u80j/56akiwsyDK3O8RfMuW+8MsoKOv+63A14Eh0vvabI9wck7b4KTD80INopOHaPpZ1ZFciaYXYJBsPAlmF2CN0tt7YFEE2vR+mAQDIJBMAgGwSAYBBMMgkEwOqcLL/Dz/dV13fvH5/k/57/ZUtb4sucXv2vpLQo+r/GxgPePz/E3qy44bkljqTuWLkVfkTFTg2M9q+xOXvzn++v0uVrWktIJnlZyqYovRfZtdid9/33Ob2B8ncixGz1FTybAB9hdfp34disbRa/K21scTGbd8XXi2+0i7+gYjFEXjmx3KevmbwiGFA2CQTAIJhgEg2AQDIJBMAgmGASDYBAMgkEwCCYYBINgEAyCQTAIBsEEg2AQDIJBMAgGwQSDYBCMWPwHIqDjj9ynrQcAAAAASUVORK5CYII=", "frame-game-menu": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACQElEQVR42u3cwXHiMBiAUZHJgUOaoIXUxVABR1fgcV1pgVY4ZMajRMijwTbI8vtOhGxYyNvfcoi1h+PXMajdPnwLAAuwAAuwAAuwAAMWYAEWYAEWYAEGLMACLMACLMACLMCABViABViABViAAQuwAAuwAAuwJvts42UMfTfePl+u6afiO4e+e/hh/CAPHwrw23RzfjFeiVYDog7RfyY+nVrAtZeO7++dzVu2vAY/8Y9gXJtj+Im1HHBFB954iJ+bfhNc78E5N4X/sNuzdJIVvNHR1A/EauQQHZ8ozTxbbu8wfvDfCTtEC7AAC7AAC7AAAxZgARZgARZgBddkhdvtZ7x9On2bYAEWYFmDX7T6xutueo8JFmABVnBV5Uo/++ZqeyU2wSa4xandzzSbYBO8j9ltdY5NsAl2Fm2CZYJrnGPvRcsEW4NNsEywTLAACzBgARZgARZgARZgwAIswAIswApb3R88fWHU9KUX6dbe8s/mLtsoeT65r1rj+Zhg1TrBJdvpS7bfl98//WeW3d5f8pjlr8UEC7AAW4OXLHeevN4KNP13lT+fpbYrvvK1m2ATvOYczz+TLN+sMP/MdqmZfuPmCRNsgitrqfeknEXLBG9he246x8s+n/jRKjxamOBgd6GswQIswAIswAIMWIAFWIAV/LowbOwqGcDvb+i78fb5cnWIFmABVvD7YCdZgOUQLcCABViABViABViAAQuwAAuwAAuwAAP2LQAswAIswAIswAIMWIAFWIAFWIAFeK/dAVZU2LmQNqpOAAAAAElFTkSuQmCC", "frame-game-menu-dice": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACRklEQVR42u3cu00rQRSA4bFF4IAGCLcFd0FMG5YrcOgKVm6DmC5owSFtEFhaDexDi1+Mz3x/ZIxlifvdM7PsrlmsnldJcVv6JwAswAIswAIswAIMWIAFWIAFWIAFGLAAC7AAC7AAC7AAAxZgARZgARZgAQYswAIswAIswJrsKcaPcWj33ePNdtf/Vv7kod0Pfpm/yeBbAf433TG/HG+OVgBRS/SPie9PLeDS64/v6cnwlpH34DP+E3R7cw4/sZcDLmjhzYf4vOk3weUuzmNT+As7nqWDrORER6hfiBVkic4PlC48Wo63jC/8OWFLtAALsAALsAALMGABFmABVnKxYXbH4+fMVzbN2gSH1f3riwEL8B1rmvXgCjz2PGA5yHqEzbiefdcEA46+HwOWPTjcL8cmWCa4jH13cHbr3IxNsAkOt+9WdU2iugmu7ZrEMtjWq8hLNGNLNGBZooP19frWPX75eDfBAizAsgffqXj7rgm2RAuwAAtwKvp8dYCT2/4QmgkWYAEWYAEWYAEGrORyYSrgluaxM01zXjn9muk7oh/oDJcJNsGp3JPJpznrz1P++bOx2Z3zvI+uyATf65Oil09byA9GmGATXHEBPkVugk1wxTmKlgm+/R55rTm77ruZYCU33TkXbYLlttnkerAAC7AAC7AAC7AAAxZgJZcLkxtxAN+iQ7vvHm+2O0u0AAuwkuvBDrIAyxItwAIMWIAFWIAFWIAFGLAAC7AAC7AACzBgARZgARZgARZgAQYswAIswAIswOr1DVF8rLvxjKQZAAAAAElFTkSuQmCC", "frame-game-play": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAADGUlEQVR42u3dP27UUBCAcSdKESQu8brQbskROAtCokcpED0S4iw5QsptoXvHoKVYybLsZeNkE+KZ+X3Vxrgh384/jx9cXL+9HpCXS78CgkEwCAbBIBgEg2CCQTAIBsEgGASDYIJBMAgGwfifXOX+6/W+Hz+3tlv+0ewiwcHsTv1Nfxw/z+6RorOJb203jXKCI7EmNHPbrRLBve+PpuL0+bmE4IPF9Xb/fH5HcNQ+q1Ts5hd8wmIRu0W76GnnnD6UCz3omAbu6NiDjrRjkhoMgrF5LhwAF8HQZEVYFP788W288vHTl6NXRDDUYIhgELxR2tcPUnQVr/32TgRnjtoQ0UzwI6evCFFLsDEJizw8i91/XSc4dg3ut3ezH6VoEGwOJniDnXOIjloNfnQEx5qUCFaDQTAIBsEFhhZNVvLlnQhOvrwjeMi9vCMYtWtw9OUdwcmXd1I0CNY55xYcenmnBidf3hEMNRgEg2CCkWIe02Ql30uK4OR7SYKH3HtJggcPOhwqHOLuJQlOvpeUogf/0l1sxv+D4c33XwXnYBGcfC95ReQax3H3kiLYHIzBsgEEg2AvTQ4lnmQ5PJg5gh0eLJSiRa0mC6FqsMOD+ZsshwelaJiDsVnBDg8WemXH4UHvZEGTRTAIBsEg2JSsi7Ytrh3BtsWFUrSo1WQhVA0+f1vc+761HcFpj3QWFFwuRfe+Jzj5HLzScY6vwmWpI51jfq4Tx4HXhU/bFk/VnqjHh9sSFOzMc3Dv+2oVt1aTdYi/meZpUD6oP8H3I/8bHUu7p7W1tluZxgmOOhpNHUcXXGIOfqykTJW7yoOOJwdidNm13qpc2ppV3Bf6lojg14zj1nZrzAUtxhXfi56F7IOPt0L3WYUEr/SXTHP1GrzmOUlox1J02vaq7is7K7sqczDNUnS6FoxgSNEgGASDYBBMcBjub9r9TZt+ePYbjEmvaXd58f3v/ow3iGAQ/GIsQ2125fwbCN6Q46Nuzr+B4E04PuHm/Bs0WRDBIBgEg2AQTDAIBsEgGASDYBBMMAgGwSAYBINgEEwwCEZI/gKQGnt/XNt7swAAAABJRU5ErkJggg==", "frame-dice-ready": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACAElEQVR42u3cwW3CMBSAYYNyyIElWKFzVUzAsRNUnasrsAoHpAjFJI2QZeW9fv+JojQWfNhpEeYwnsaivB09BYAFWIAFWIAFWIABC7AAC7AAC7AAAxZgARZgARZgARZgwAIswAIswAIswIAFWIAFWIAFWIABC7AAC7AAC7C2N3Qb6Xb7bXKe8/kj9xAhZ3Cr52XlVDmGCAnc/MHUJ8wxhGuwAAswYAEWYAEWYAEWYMACLMACLMACLMACDFiABViABVi7BW7+Kf76hDmGCDyDGz6YpVPlGKJ5h/E0Wscs0QIswAIswCq73OFf9veNACXgjv0kM7jPXvqIO/YzAPfZSx90x75rsAADFmABFmABFmABBizAAizAAizAAizAgAVYgAVYgAVYIYD77KUPumM/yQzus5c+4o79Yoe/XIMBC7AAC7AAC7AAAxZgARZgAVbJ/013f/bz/TXd/rxcpzun2y9/fD545fjnk8+GANxJd8Vp/VeWDp7dH1TUEr3pFeMavK+2T9/HwbMVOKtu4CV6Qqph6svne3P35TUecO9ZWzPXf1W9B59jTg8lxeK8ZY1dgn8sBlmX6GOC/5EaLviA05bVeMjh0WSBna3VM++ga7jPRRfvRQuwAAuwAAuwAAMWYAEWYAEWYAEGLMACLMACLMACLMCABViABViABViA/1l3tPS0wRkjAMcAAAAASUVORK5CYII=", "frame-exercise-walking": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAAC6ElEQVR42u3dzW3qQBSG4UnEIos0kRZuXYgKWFIBoq60kFbuwpJlxWDPGAg+x8+rLNBl8OK+fHM8f+bt4/OjIC/v/gsIBsEgGASDYBAMggkGwSAYBINgEAyCCQbBIBgEg2AQDIJBMMEgGAQ/ksv5NH59OZ+6v3GbZZ+61SYcuwRf0sv5tD8cx69nG+8Px+n2TVeW4HV9FWa7h19EtBtY8II+syaCXabHH4zbS+/SRHO2zWyHfMtx95GggpN00fvDsftbENA0vXGSBPdBnL0/uips+MGuzcR1Kr8Qa+bNAXDjYBAMgkEwCAbBSDiTtZifn+/+9dfXPwkGwSAYavDTK+uwjQSjWGxYaYJbSXYvLcG66O2NjDOVZ4LdRZvhilyVJViC0905b2pkLMESvJnsDt9Nk2YJluAUtNbdrn337jjfEgwJfvXcstUkSPC6s3v/7NWwEkswCF5UQVdy+xp0lUmC1eCVjWJfG6Nwq0wSrAYnrcrrqe4Eo2x6V2VNVa6fz5qu9+FCL8Huokue/R7j/KUvwxIswRvIcWttlmC4i371utM4kdNXkGBIcPw1Y+NguIuOmV3jYKjB0ZKdYJ5LgiXYkzokGBK80jRbTYJxcEl13lCCIcGyK8EgOOcZJ4JhHAwJBsEEg2AQjGImqzz2jELruYRbV3O6EBL8t/s0prNYf5qh9ToSDAkuDWtB9+/QGGaxZvdW0D3YEizBJduZ4NY62pp1CYYEv2KsfH/WJRgS/Pzs1o9unU1CsaPj6TNZ9c+irf/dJHPRkGBIMAgGwSCYYBCMYqqyZHsWWvTZSgmW4BL7cHc/DfnrN60S/6x78tWkie1aV9/q//FWA110nm9GvkPi7/ypwYHLsOcN7zb1iMouxJuyrgYTrBITnKZ45+u9d+kfZHd1//OwTf86ZW0Ov2XHXLQu2k0Wil2VkGAQDIJBMAgGwQSDYBAMgkEwCAbBBINgEAyCQTAIBsEEg2AQDIJBMB7Of+mrbZhgw3GLAAAAAElFTkSuQmCC", "frame-rhythm-menu": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACNUlEQVR42u3dW07CQBSA4YPxgQc3wRZcF2EFPLICwrrYQrfiA0nTtJ3JMELp5ftjjCJW4seZlou42//sQ+vty68AsAALsAALsAALMGABFmABFmABFmDAAizAAizAAizAAgxYgAVYgAVYgAUYsAALsAALsABrNcC366X71j29d7bR09tTettpt1a4neFm59z3sq6Px9O5+4vuflqxkeotmOC5XBt6g17NmVkVAMsS/fwkDZfrzBC375/a/uhi0FsVAL9lHzzUymCX6xZeaSzRU+9cJ/uhSzwisw92O9gQA9Zs23k5YRMswAIswAIswAIMWIAFWICnrWnuTXMHLMAKjybJBAuwgyzAAgxYgAVYgD95CN37INzRsUS/w+G3QrH3XY9PTbBM8PxGfE0DaoJjiLodXUs0YAEWYAGWm0kywfKMDs/oEGA5yJIJFmABFmDAAizAAizAAizAAhz+b1LM69nqkf5Lk/wToUfPmf9q6hnU5ec0wdr2BD9mJT8ZwylMzVzJ6fnzlFweEyzAAqw17INTx8nv2wvmf9b0l8cEa/m3g8uPiutuT6fWjNT2X3V5TLA2+Q+iX74S1M2xo2iZ4P/dCz3lMXz+fm9H0Qp/uiITLMACDFiABViABViABTg82BArfE332N5rf2/68eCIuF0v7cfH07nwS5ZoARZghceDHWR5wF+WaMACLMACLMACLMCABViABViABViABRiwAAuwAAuwAAswYAEWYAEWYAEWYMBadX8xB9aX2izmjwAAAABJRU5ErkJggg==", "frame-rhythm-menu-wave": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACDUlEQVR42u3c3W3iQBSA0UuUBx7SBC2kLkQFPFIBoq60QCs8RBpZM3g0WLGxJ+coWiXerCPl4/pnbbzbf+2Dfn34FQiMwAiMwAiMwAgsMAIjMAIjMAIjsMAIjMAIjMAIjMAILDACIzACIzACI7DACIzACIzACEw3gW/Xy/BjuDz7tqfL05JsPWltjespV7tmn9t6PR5P5+EvevjlhJVMXoMJXsurIRv0yTkrWwWBsYl+fZLKzXVliNOfL63/6cYg2yoIPMs+uKxVid1et/FFYxO99M51sR+6xSMy+2DnwYZYYFZr53HCJhiBERiBERiBEVhgBEZgBCZc8G9wv/9U/vZw+M6+53fJcGG2JH1pghEYgREYgRFYYMI9WRs4D/7P574m2CYagREYgREYgYnOrwfXz4xdD8YmGoERGIERGIEJz+gwwQiMwAiMwAiMwAIjMAIjMAIjMNHRXZVj9zuWy8febNi+npbH9phgTPD7prxFB3dHm2AHWQiMffBC+9plHv1hgjHB73v4rKNoTPC6jZ0Hl28XLj93FI0JnnMu/2ryWtYwti/3f9GE9yZhghEYgQVGYARGYARGYAQmen+ccHR3843AERG36yV9fjydZ/1XNtEIjMCE68EOslzwt4lGYARGYARGYARGYIERGIERGIERGIEFRmAERmAERmAEFhiBERiBERiBERiBBWb7HtDgyDL8kfNZAAAAAElFTkSuQmCC", "frame-rhythm-menu-circuit": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACSElEQVR42u3czW3iQBiA4SHiwCFNuAXqQlTAkQoQddGCW8khkjWy8WRswLFnnlerFcuCI/Hwjfmxszt8H4LK7ctDAFiABViABViABRiwAAuwAAuwAAswYAEWYAEWYAEWYAEGLMACLMACLMACDFiABViABViAVQzw/XaN/8TX92729Prumt52uq1lbme42TW339bz8XS+xA90/M8ZG5m9BRO8lmdDb9BncyZWBcCyRE+fpOFynRji7u9J23+6GPRWBcAf2QcPtRLY+bqZTxpL9NI718V+6BZfkdkHex9siAFrte38OmETLMACLMACLMACDFiABViABViAVTFw2z7a9pG+DFiABVjBER1v3wH/eZumOQIuDbUe7CqW6KY5lj2moZgzG6ZOoSV6X8OzuIb3u/bB9sEywd4mmWCZYPtgEywTbB9sgiO8+MOs3uXg2yQBFmB5kSUTLMACDFiABViABViABRiwAAuwAAuwQgHnJg2PiBseIZW+zdgxdfO2M3av9E/MP9ftX47/MsEm+GOzmzMxv5fHbp+e1/R909tMT+HYfXNWBROscs8PXvL5Xsk5/ybYBIftnZ9S7W/kMMEmOGz1BKSVvGo1wap4gl+ZwqlzXMnEm+Dg3KS1fxb9+mfI772NT7Lk7EKZYAEWYMACLMACLMACLMDB14VVVfYRP6UB32/X7vLpfMn8L0u0AAuwgu+DvcgCLEu0AAMWYAEWYAEWYAEGLMACLMACLMACDNhDAFiABViABViABRiwAAuwAAuwAAtwrf0AsI7yjIb5Pk8AAAAASUVORK5CYII=", "frame-rhythm-strike": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAADXUlEQVR42u3dMW4TURDG8RdrixRcgNISJ+AIkVLlGEhUKREVJRWipELiBIgSGiSOkCv4KhQrWSsnjpy115438/tXCEWWycf3vjdv5u1eXb+6bsjLyq+AwCAwCAwCg8AgMAhMYBAYBAaBQWAQGAQmMAgMAoPAIDAIfDSbzcNm80BgEBiBuaowFz0uxev1Ww4GB7M1B4PAIDAIDAITGMqklAXSlMTFEgcn72QMWd05mvLA3/KTP7bzCZ26fOC2JYjzv0EGy2D0TK0l+uuXzzvhelrvBmxgrPrdZxaZuSnk4OP98eHjJwJ3s88MuDMK+JVW1TJ4jGEOVlwm2WTV2kXL4EL+KDJkWcvB//7+Hv9wc3vX9IObhg+BYYkORJ2VuZDAY+E77p+nzd1fP/8s1KEKVSxZopNvBfroB5+qgztvPGPelMgztdn0A5e2+2DQIvdXuryDF/XHMxk8/fvEUyIyuJmLrp7BJjp6nbVTB8faiRzuj2m+bs+f2/5z6dPmcXNUCQ5u5+z7Ju4TD3XOn3cyuMi59JDyzHnM11HCQzJ4+vPJ8tjdpOQnZT3dTZpXZW6dun7zeqpEkemOQpfPphlc56BjyJ27N7d3+843pqdaifN4pXVqF91HvXuqKJ1+zku9a5N17oQ7xPG5B6T7u7pyTO4e0mVKlsfOopNvOAa5u1Ae58ngaMXf8UM/MvjcNe6T/d1tRs7L3Xl5/Lh/HDybB9f01MGXz9po/oj83fo+i45wktXXijWEzdfH4/8xn4i5L7OD5LQ6WAbXzrDe/40J+8Hq4HM7+Mf3b621d+/v1cEyGB06+KXezVoHz1vJZHA3/WACLz6HtU9g/WDIYP3g5iw6+1w0B5uLTpTBxpg5ONtctAyWwRzsfrA6GJZo94NlsAzOlMenfU7WRdoGMhgyWAZDBid5Z0Pi51PKYBmcvVKqUybJYBksg2UwvDepRRgvDZjBXb43KeAjG703qYTABd8fPLgDb5MFdTA4OEhNPJa/BIYlukz1zMGIe5Oj1ibr8PPnGetBzOrfe5OSV//KJBkMAoPAIDAIDAKDwK3QSRaBm2YDLNEgMAgMAoPAKCpwzWdncrA6GBwMAoPAIDAIDAITGAQGgUFgEBgEBoEJDAKDwCAwCAwCg8AgcAH+A6HtWnYA0twCAAAAAElFTkSuQmCC", "frame-wave-beat": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAACc0lEQVR42u3dQW7iQBRFUVOqAYNsgi1k/2vIFthKZhEKIEEIrvqvzh12dyTswy8bx20Ox4/jptyaXQBYgAVYgAVYgAUYsAALsAALsAALMGABVr166oadz1/3/up0+rz+Z5d/CLik67M/mEEeO8H/+F4pLd2L7vc9d/rlcJfD7issv6XfXvnAM7jWXb0b3Rdf3uSv0OfgcGbA4YsN4PBRBhzODDh8xQYcbgw4fLluzjmzN7bRzd7kRjd7ww9jH+Hwa5sfubR7bzfd+9lHduvNWwDe1M6Xr51khc8x4HBjwOHGgMONAYcbAw43Brz5nw0qPMSAw40BhxsDdgxW5SEGbIJVeYgBhxsDtkSr8hAfJvxSjgVv83jfjR8mOHyIATsGC7CmXaUBm2BVHmLAJliABVhjDsOATbAAa9pVGrAJFmAB1ph2vaPj2Uenv/s+jUJPhPnzDR4mOPxEGrBjsAALsAALsAALMGABFmABFmABFmDA2iJ/4d8nfJWe0WGCBViAAQuw5n4oGmATLMCa9qGVgE2wAAuwxjw1GrAJVtnxBWyCBVgzfynH4G9dcfOGb10xvoAFeM3xBRyuC9gSrcrjC9gEq/L4Ag7XBRyuC9gxWJXHF3C4LuBwXcDhuoDDdQGH625D7uj4uWViwfs3dtYdM8H7b+SasztyiV7QeNQmt9U2eLWN7Zui38fOosNXKcDhxyBLdPjpBeDwM0dLdPjnAhMc/pGv2XcvvrzJX2EvNB/zPLS50FWaXm4lHMtc7gJcd8DLvqrqJCv8anlPVXl2JU/95cfgRzjIhQ4BFmDAAizAAizAAizAAgxYgAVYgAVYgHXVN6Yc6KrMQLx5AAAAAElFTkSuQmCC", "frame-circuit-beat": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAAFGUlEQVR42u2dsW4UMRCGnZOLK1JHokyHREcTKQUFouIJKIJ4B2pEwQPcS0DBE1ClokBKk476RIVET09x6LK6xca79tjj8fdX0eVuL9nf//4zs+PZs+351gG72HAKIBhAMIBgAMEAggEEAwiGYADBAIIBBAMIBhAMIBiCAQQDCAYQDCAYFIM38D/s9/eR315ePhX6LAoGKLgEQjqLq9OYUlEwCu7Qaw/KC70+/1SOH3eqfhSMglU6bly1cR3H8ernp5NX7q53eDBAwY2y4XUeeVDt1be3vefKKBgFq8HUHae6yc+D5zhoV+74KBjgwTL4/OhmJtUbomiAgkNR6IeXp4J5/yUS2davaUNwDUyjnnhuA1oSPI88n398d1TtXM3a7ivnR86VrxOdefDd9Q6ZdnCJnquhlXanufXh55QFlKJCJVlyZ2lSihMDXQRP3TcUP+tcASkaDTn34ZUKfkwejIJ7i8Ie1ON2i96/LnyLV6qbO/HQpcoRcmuv9s6uhD9NGS3FnPJ7Sniw8dx6lEu0xPWgi9o1twuN59beMFvzO7vrNCe3AtJ7tvFgoFvBv29/iObBObHu0tx6qX+LxuG+xwpGX/tX20ZkXsk+3XQvnDMdel3O1yXYEvJjPLhk1qQwcfKq9ul24A4CHZbH83Y8Ufv9fam14gevYVV2YmsenLMMg3uN3O7f3xV4fZ3HS/h6+o7IgmsFDyYPLrR/t2yNN/Qe6TAn5/gpuW/x6/y4Hjw/lfOt3yi4Wd1A4nrzN8d1u4c6diBmLnudKBu74MF4sIwc83M7Cd2E6kfSOX18oggezFazWgSn9E/lxNXTz4p6VYUesSaVEDwYBTeNikMe2WN9u4kpeLqrXHaNWrOd+wrLNuRhV29eO+cunj0xEARV22uEB7OHuPr94BB+ff0OAXhwT33OrRK5Lgnutw8knrtXjr3Jg7lEZ6+7lBpv70XEkGolelraE7z0LzNTFjbeVVnneQz2VoZoDr0ZrU8YD25/cVOYbECwwX53ucy7ZqHNd/08hmmbHOVJ8mA3YA3cK082cF9q0dTA5QnOr92kTJu9ePG4WrQizVa11YAHc4muUpxLmTM7fY+0AiTmctQ8vqwHExnZD7JS6qtLa7DT90/3EfU4l0NinhcejIJBrbkcEvO87BPcqpCkuUrqK7SZrXvPurlwoTkb0rO0ls72ctSigbo8OL/7Iq7sVtlXzdp48e9CwShY2R7DUN/WPD8O/RzKrctGsNO/Z2kcTh4MNCm41GypOv1AZXfyLz1a8f8LBaPgTvbOpqz9fH3E+7dz8nvyYGClL7rUZ+XyV4mo2xrBw+5f6p7glDmqxfpABObOycXATXS/4TkHKLikF2rrCsqZw/Vfjz85SJOn73jmNKBgjc9QSl8ZbSPe47cf54U57geDzmZ0tDq+RNyeE1czq9J1uotVc77uzcxb1nNmVU0owION5+7e8JAiDT1cENxfrbuv3L1NT9a6Na4nt+7Ijzf4JXmwFk+q/ywj6flflj245hNxULDe2Y2tnoWQ452qVhV5MAp2Q5ckV1w8yIMZBz0GwUu9qmZOGbqLrCE+wIOBDgXn1JalI1Uz+ZU3WVgGHd9NqkB25HmLCns28GAUPNjziIbKmrzVBJQNE/YLHXJ5qnLfxYNRMLBy5UfBKNhEr92wpRIUbBxn2/MtZwEFAwgGEAwgGEAwgGAAwRAMIBhAMIBgAMEAggEEQzCAYADBAIIBBAMIBgn4AzYblo2fmOicAAAAAElFTkSuQmCC", "frame-settings": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAAAAErfB6AAADVElEQVR42u3dy23jMBRAUcXQIotpwi2kxlQwmLrSgluZhQFBsCiKjPXh51wEQSzIssArko98pPPx+edzQLvcFAHBIBgEg2AQDIJBMMEgGASDYBAMgkEwwSAYBINgEAyCQTAIJhgEg2AQDIJBMAgmGASDYBAMgkEwCCYYBINgEAyCQTAIBsEEg2AQDIJxHOM5H/N4/FRRHPf7lxoMNTizokz1e+144lvmB1/e+3wZrKC5rUvkrgheLabpZfz4mrngy8iHbp4ZucLLI1W4Y020KLoeTgjlqovCxhLi1bVe7R1hR5uIdOoEZ/e16TrX+vLdb76WqnwrtrHNKsHH4+e0oXZFdgVZjdstWnBuUbY3CdVmkLV5/vOP51vmD8Fpdevlbgt/sD7O+e+j5qI10SAYxTbRUINBMGoZJgWD6vn4Z3kwmKRbXmc5Z/lyMPE6kYh6M0udntVuP+G/HLwGjeYObHKztumD6ciV54/L5iOliV6tN2UOqefmfr2aQB9cx0xIxG4vTfTvSjaYSbykh1tbRDZV5eXaoKvmyMYeqtRpMUSwi53HcWpwxRPF8QAqN3jUBxe37GuXNbkElx4ilLYoYCx8OLRZUsGJkeV66bV11O+IfLlCMJ56/xMHyQZoogkGwSAYBKPPrSvx45GR5dr5B02Bxcc8y2HS8s5PHiWPJczqBTOpb2Znj8vCpiwfKGeiQxO9z+xV4jmdzkU3sNy82IT/OHSQFbj2AXr6nn4TvGercGaZxhNNV3XMzQo+v2T3+m6CBvvgWrammeioNdZteDP4WEKhp+Rrs/K+V624G2w+gyYaBINgEEwwBvngnUaQa1t1IweHrbxvMDubOFCODIGydh5LNqTOIefmfYPZ2c19ye98X3SZ8x6aaH3w8TNZuz/7l2Rni0oD15dNylrDVXX+uN8N4JE+OBi1nb+q5MK8b3F98NSg7VIiy+bxfv+afvTBaLYnvjWz3KLMGEcfnLo/+OggKHGtfEoGuqhHTT5YHwyCQTAIBsEgeIN/f78JbtxuV45vfdbdfhzfum2ZO3FsJksNBsEgGASDYBAMggkGwSAYBINgEAyCCQbBIBgEg2AQDIJBMMEgGASDYBAMgkEwwSAYBINgEAyCQTDBIBgEo0T+AzDhNizha+K4AAAAAElFTkSuQmCC", "icon-arrow-left": "<svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M10.236 11.9981L16.6 5.63418L15.1858 4.21997L7.40761 11.9981L15.1858 19.7763L16.6 18.3621L10.236 11.9981Z\" fill=\"currentColor\"/>\n</svg>\n", "icon-arrow-right": "<svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M13.774 11.9981L7.41 5.63418L8.82422 4.21997L16.6024 11.9981L8.82422 19.7763L7.41 18.3621L13.774 11.9981Z\" fill=\"currentColor\"/>\n</svg>\n"}</script>
+<script type="module">const surfaceOwners = {"finger-panel": el => { el.dataset.designSurface = "finger-panel"; },"gesture-guide": el => { el.dataset.designSurface = "gesture-guide"; },"hand-hint": el => { el.dataset.designSurface = "hand-hint"; },"tracking-message": el => { el.dataset.designSurface = "tracking-message"; },"control-panel": el => { el.dataset.designSurface = "control-panel"; },};
 const spec = JSON.parse(document.querySelector('#pico-design-spec').textContent);
 const images = JSON.parse(document.querySelector('#pico-images').textContent);
 const app = document.querySelector('#app');
 const nodes = Object.fromEntries(spec.nodes.map(n => [n.id, n]));
-const brand = spec.theme.brandColors;
-const color = name => brand[name] || `var(--sui-${name}, currentColor)`;
+const color = name => spec.theme.brandColors[name] || `var(--sui-${name.replace(/[A-Z]/g, c => '-' + c.toLowerCase())})`;
 const PX_PER_M = 600;
-let dataCase = 'normal', stateId = spec.initialStateId, pageIndex = spec.dataCases.normal.activePageIndex;
-let tiltDeg = 0, armed = true, dragStartX = null, handIn = false;
-const ring = nodes['ring-on-hand'];
-const pages = () => spec.dataCases[dataCase].pages;
-const fire = event => {
-  const action = spec.actions.find(a => a.id === ring.events[event]);
-  if (!action) return;
-  if (action.type === 'transition') {
-    const t = spec.transitions.find(x => x.id === action.transitionId);
-    if (t.from === stateId) stateId = t.to;
-  } else if (action.type === 'increment') {
-    const n = pages().length;
-    if (n) pageIndex = (pageIndex + action.value + n) % n;
-  }
+const ring = nodes['ring-on-hand'], picker = nodes['hand-picker'];
+const SPOTS = { thumb: [36, 224, 58, 172, -38], index: [104, 62, 46, 180, -8], middle: [160, 20, 46, 216, -2], ring: [216, 44, 46, 196, 5], little: [272, 104, 42, 150, 14] };
+let dataCase = 'normal', stateId = spec.initialStateId, finger = picker.props.default;
+let tipDeg = 0, armed = true, dragStartX = null, clicks = 0, clickTimer = null;
+const menu = () => spec.dataCases[dataCase].menu;
+let level = menu().root, index = 0, trail = [];
+const items = () => menu().levels[level] || [];
+function act(id) {
+  const a = spec.actions.find(x => x.id === id);
+  if (!a) return;
+  if (a.type === 'increment') { const n = items().length; if (n) index = (index + a.value + n) % n; }
+  if (id === 'open-item' || id === 'button-confirm') { const to = items()[index]?.opens; if (to) { trail.push([level, index]); level = to; index = 0; } }
+  if (id === 'go-back' || id === 'button-back') { const t = trail.pop(); if (t) [level, index] = t; }
   paint();
-};
+}
+function fire(nodeId, event, value) {
+  if (nodeId === 'hand-picker') finger = value;
+  const t = spec.transitions.find(x => x.from === stateId && x.trigger.nodeId === nodeId && x.trigger.event === event);
+  if (t) stateId = t.to;
+  const id = nodes[nodeId].events?.[event];
+  if (!t && id) act(id); else paint();
+}
 function ringSvg() {
-  const page = pages()[pageIndex];
-  const p = ring.parts;
-  const href = page ? images[page.assetId] : '';
+  const item = items()[index], p = ring.parts;
+  const href = item ? images['frame-' + item.frame] : '';
   return `<svg viewBox="0 0 240 320" width="240" height="320" role="img" aria-label="${ring.accessibilityLabel}">
     <defs><clipPath id="screen-clip"><circle cx="120" cy="110" r="66"/></clipPath></defs>
     <rect x="76" y="150" width="88" height="160" rx="22" fill="${color(p.band.appearance.fill)}"/>
@@ -4135,28 +4810,68 @@ function ringSvg() {
     ${href ? `<image id="ring-page" href="${href}" x="54" y="44" width="132" height="132" clip-path="url(#screen-clip)" style="image-rendering:pixelated"/>` : ''}
   </svg>`;
 }
+function handSvg() {
+  const { widthDp: w, heightDp: h } = picker.props, parts = picker.parts;
+  const fingers = picker.props.fingers.map(f => {
+    const [x, y, fw, fh, tilt] = SPOTS[f], on = f === finger;
+    const fill = on ? color(parts.finger.states.selected.fill) : color(parts.finger.appearance.fill);
+    const markFill = color(parts.ringMark.appearance.fill);
+    const mark = on ? `<rect x="${x}" y="${y + fh * 0.72 - 7}" width="${fw}" height="14" fill="${markFill}"/><circle cx="${x + fw / 2}" cy="${y + fh * 0.72}" r="11" fill="${markFill}"/>` : '';
+    return `<g data-finger="${f}" style="cursor:pointer" transform="rotate(${tilt} ${x + fw / 2} ${y + fh / 2})"><rect x="${x}" y="${y}" width="${fw}" height="${fh}" rx="${fw / 2}" fill="${fill}"/>${mark}</g>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${picker.accessibilityLabel}"><rect x="100" y="210" width="216" height="200" rx="${parts.palm.appearance.radiusDp}" fill="${color(parts.palm.appearance.fill)}"/>${fingers}</svg>`;
+}
+function surface(el, node) {
+  const a = node.appearance;
+  surfaceOwners[node.id](el);
+  el.style.setProperty('--pico-design-surface-fill', color(a.fill));
+  el.style.borderRadius = a.radiusDp + 'px';
+  el.style.padding = (node.layout?.paddingDp ?? 0) + 'px';
+  if (node.layout?.widthDp) el.style.width = node.layout.widthDp + 'px';
+  if (node.layout?.maxWidthDp) el.style.maxWidth = node.layout.maxWidthDp + 'px';
+}
+function textEl(node) {
+  const t = document.createElement('sui-text');
+  Object.entries(node.props || {}).forEach(([k, v]) => t.setAttribute(k, v));
+  if (node.textStyle) t.setAttribute('variant', node.textStyle.typography === 'title' ? 'titleLarge' : 'bodyLarge');
+  t.setAttribute('color', color(node.appearance?.foreground || node.textStyle?.color || 'labelPrimaryLight'));
+  t.textContent = node.content;
+  return t;
+}
 function renderNode(node) {
   const el = document.createElement('div');
   el.dataset.nodeId = node.id;
   if (node.visibleInStates && !node.visibleInStates.includes(stateId)) el.hidden = true;
   if (node.kind === 'layout') {
-    el.className = 'overlay';
+    el.className = node.layout.mode === 'row' ? 'row' : 'overlay';
     node.children.forEach(id => el.append(renderNode(nodes[id])));
-  } else if (node.kind === 'domain_visual') {
-    el.style.transform = `rotate(${tiltDeg}deg)`;
-    el.style.transition = 'transform .08s linear';
+  } else if (node.id === 'ring-on-hand') {
+    el.style.transform = `rotate(${tipDeg}deg)`;
     el.innerHTML = ringSvg();
-  } else if (node.kind === 'spatialui') {
-    const a = node.appearance || {};
-    surfaceOwners[node.id](el);
-    el.style.setProperty('--pico-design-surface-fill', brand[a.fill] || `var(--sui-${a.fill.replace(/[A-Z]/g, c => '-' + c.toLowerCase())})`);
-    el.style.borderRadius = a.radiusDp + 'px';
-    el.style.padding = (node.layout?.paddingDp ?? 0) + 'px';
-    if (node.layout?.maxWidthDp) el.style.maxWidth = node.layout.maxWidthDp + 'px';
-    const t = document.createElement(node.component);
-    Object.entries(node.props || {}).forEach(([k, v]) => t.setAttribute(k, v));
-    t.textContent = node.content;
-    el.append(t);
+  } else if (node.id === 'ring-mirror') {
+    const item = items()[index];
+    if (item) el.innerHTML = `<img alt="${node.accessibilityLabel}" src="${images['frame-' + item.frame]}" width="${node.props.sizeDp}" height="${node.props.sizeDp}" style="image-rendering:pixelated;border-radius:50%;display:block;margin:0 auto">`;
+  } else if (node.id === 'hand-picker') {
+    el.innerHTML = handSvg();
+    el.querySelectorAll('[data-finger]').forEach(g => g.addEventListener('click', () => fire('hand-picker', 'tapFinger', g.dataset.finger)));
+  } else if (node.component === 'sui-icon-button') {
+    const b = document.createElement('sui-icon-button');
+    b.setAttribute('aria-label', node.accessibilityLabel);
+    b.innerHTML = images[node.assetId];
+    b.addEventListener('click', () => fire(node.id, 'click'));
+    el.append(b);
+  } else if (node.component === 'sui-button') {
+    const b = document.createElement('sui-button');
+    Object.entries(node.props || {}).forEach(([k, v]) => b.setAttribute(k, v));
+    b.setAttribute('text', node.content);
+    b.textContent = node.content;
+    b.addEventListener('click', () => fire(node.id, 'click'));
+    el.append(b);
+  } else {
+    if (node.appearance?.fill) surface(el, node);
+    el.className = 'column';
+    el.append(textEl(node));
+    (node.children || []).forEach(id => el.append(renderNode(nodes[id])));
   }
   return el;
 }
@@ -4164,35 +4879,42 @@ function paint() {
   const s = spec.surfaces[0];
   const stage = document.createElement('section');
   stage.id = s.id;
-  stage.style.width = stage.style.height = s.defaultSize.width * PX_PER_M + 'px';
+  stage.style.width = s.defaultSize.width * PX_PER_M + 240 + 'px';
+  stage.style.height = s.defaultSize.height * PX_PER_M + 'px';
   stage.append(renderNode(nodes[spec.states.find(x => x.id === stateId).surfaceRoots[s.id]]));
   app.replaceChildren(stage);
   app.dataset.state = stateId;
-  app.dataset.page = pageIndex;
+  app.dataset.frame = items()[index]?.frame ?? '';
 }
-const onMove = e => {
+function airClick() {
+  clicks += 1;
+  clearTimeout(clickTimer);
+  if (clicks === 2) { clicks = 0; fire('ring-on-hand', 'airDoubleClick'); return; }
+  clickTimer = setTimeout(() => { clicks = 0; fire('ring-on-hand', 'airClick'); }, ring.props.doubleClickWaitMs);
+}
+const onMove = x => {
   if (dragStartX === null) return;
-  tiltDeg = Math.max(-60, Math.min(60, (e.clientX - dragStartX) / 2));
-  const { tiltTriggerDeg: trig, tiltResetDeg: reset } = ring.props;
-  if (armed && Math.abs(tiltDeg) >= trig) { armed = false; fire(tiltDeg > 0 ? 'tiltForward' : 'tiltBack'); return; }
-  if (!armed && Math.abs(tiltDeg) <= reset) armed = true;
+  tipDeg = Math.max(-60, Math.min(60, (x - dragStartX) / 2));
+  const { tipEnterDeg: on, tipExitDeg: off } = ring.props;
+  if (armed && Math.abs(tipDeg) >= on) { armed = false; fire('ring-on-hand', tipDeg > 0 ? 'tipRight' : 'tipLeft'); return; }
+  if (!armed && Math.abs(tipDeg) <= off) armed = true;
   const n = app.querySelector('[data-node-id="ring-on-hand"]');
-  if (n) n.style.transform = `rotate(${tiltDeg}deg)`;
+  if (n) n.style.transform = `rotate(${tipDeg}deg)`;
 };
-app.addEventListener('pointerenter', () => { handIn = true; fire('handFound'); });
-app.addEventListener('pointerleave', () => { handIn = false; dragStartX = null; tiltDeg = 0; armed = true; fire('handLost'); });
-app.addEventListener('pointerdown', e => { dragStartX = e.clientX; });
-window.addEventListener('pointermove', onMove);
-window.addEventListener('pointerup', () => { dragStartX = null; tiltDeg = 0; armed = true; paint(); });
+app.addEventListener('pointerenter', () => fire('ring-on-hand', 'handFound'));
+app.addEventListener('pointerleave', () => { dragStartX = null; tipDeg = 0; armed = true; fire('ring-on-hand', 'handLost'); });
+app.addEventListener('pointerdown', e => { if (stateId === 'ring-worn') dragStartX = e.clientX; });
+window.addEventListener('pointermove', e => onMove(e.clientX));
+window.addEventListener('pointerup', () => { dragStartX = null; if (tipDeg !== 0) { tipDeg = 0; armed = true; paint(); } });
 window.__preview = {
   setDataCase(c) {
-    dataCase = c; pageIndex = 0;
-    if (c === 'error') { stateId = spec.initialStateId; fire('trackingDenied'); } else { stateId = spec.initialStateId; paint(); }
+    dataCase = c; level = menu().root; index = 0; trail = []; stateId = spec.initialStateId;
+    if (c === 'error') { stateId = 'hand-searching'; fire('ring-on-hand', 'trackingDenied'); } else paint();
   },
-  fire,
-  tilt(deg) { dragStartX = 0; onMove({ clientX: deg * 2 }); },
-  release() { dragStartX = null; tiltDeg = 0; armed = true; paint(); },
-  state: () => ({ stateId, pageIndex, dataCase }),
+  fire, airClick,
+  tilt(deg) { dragStartX = 0; onMove(deg * 2); },
+  release() { dragStartX = null; tipDeg = 0; armed = true; paint(); },
+  state: () => ({ stateId, finger, level, index, frame: app.dataset.frame, dataCase }),
 };
 paint();
 </script>

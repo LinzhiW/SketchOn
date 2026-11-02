@@ -2,19 +2,20 @@
   "schema_version": 1,
   "design_spec": {
     "path": "design-spec.json",
-    "sha256": "bb73143363acf6aaa2b82e5944174f730cb08e7285ec61d1bcd4fadc66ad1bd9"
+    "sha256": "b3468eb49b4957581f98913d6ec442475b9d9cf4824915e74ece2eb7e6ef643b"
   },
   "source_mappings": [
     {
       "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/ui/ringwear/components/RingOnHand.kt",
       "symbols": [
         "RingOnHand",
-        "wearOnFinger"
+        "wearOnFinger",
+        "RaisedHand"
       ],
       "evidence": [
         "HandTrackingProvider",
-        "attachments.entity(HINT_PANEL_ID)",
-        "RING_PROXIMAL"
+        "GUIDE_PANEL_POSITION",
+        "fingerSegment"
       ],
       "design_refs": [
         "state-model:initial",
@@ -34,23 +35,109 @@
         "SCREEN_DIAMETER_MM"
       ],
       "design_refs": [
-        "asset:ring-model"
+        "asset:ring-model",
+        "asset:frame-idle",
+        "asset:frame-home-pet",
+        "asset:frame-home-game",
+        "asset:frame-home-exercise",
+        "asset:frame-home-rhythm",
+        "asset:frame-home-settings",
+        "asset:frame-idle-gem",
+        "asset:frame-idle-clock",
+        "asset:frame-idle-rest",
+        "asset:frame-face-gem-dragon",
+        "asset:frame-face-clock-network",
+        "asset:frame-face-rest",
+        "asset:frame-pet-egg",
+        "asset:frame-game-menu",
+        "asset:frame-game-menu-dice",
+        "asset:frame-game-play",
+        "asset:frame-dice-ready",
+        "asset:frame-exercise-walking",
+        "asset:frame-rhythm-menu",
+        "asset:frame-rhythm-menu-wave",
+        "asset:frame-rhythm-menu-circuit",
+        "asset:frame-rhythm-strike",
+        "asset:frame-wave-beat",
+        "asset:frame-circuit-beat",
+        "asset:frame-settings"
+      ]
+    },
+    {
+      "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/ui/ringwear/components/RingMirror.kt",
+      "symbols": [
+        "RingMirror"
+      ],
+      "evidence": [
+        "MirrorSize",
+        "FilterQuality.None"
+      ],
+      "design_refs": [
+        "node:ring-mirror"
+      ]
+    },
+    {
+      "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/ui/ringwear/components/HandPicker.kt",
+      "symbols": [
+        "HandPicker",
+        "HandFinger"
+      ],
+      "evidence": [
+        "FingerSpots",
+        "spatialHoverEffect",
+        "drawRingMark"
+      ],
+      "design_refs": [
+        "node:hand-picker"
       ]
     },
     {
       "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/ui/ringwear/components/HintPanel.kt",
       "symbols": [
+        "FingerPanel",
+        "GestureGuide",
+        "ControlPanel",
+        "ArrowButton",
         "HandHint",
         "TrackingMessage"
       ],
       "evidence": [
+        "control_title",
+        "confirm_button",
+        "back_button",
+        "ic_arrow_left",
+        "ic_arrow_right",
+        "finger_title",
+        "guide_next",
+        "guide_previous",
+        "guide_open",
+        "guide_back",
+        "guide_click",
+        "wear_button",
+        "change_finger",
         "hand_hint",
-        "tracking_message",
-        "GemtronicColors.ringScreenBase"
+        "tracking_message"
       ],
       "design_refs": [
+        "node:finger-panel",
+        "node:wear-button",
+        "node:gesture-guide",
+        "node:guide-next",
+        "node:guide-previous",
+        "node:guide-open",
+        "node:guide-back",
+        "node:guide-click",
+        "node:change-finger-button",
         "node:hand-hint",
-        "node:tracking-message"
+        "node:tracking-message",
+        "node:control-panel",
+        "node:control-arrows",
+        "node:previous-button",
+        "node:next-button",
+        "node:confirm-button",
+        "node:back-button",
+        "asset:icon-arrow-left",
+        "asset:icon-arrow-right"
       ]
     },
     {
@@ -59,39 +146,50 @@
         "RingWearViewModel"
       ],
       "evidence": [
+        "RingPhase.FingerChoosing",
         "RingPhase.RingWorn",
         "RingPhase.HandSearching",
         "RingPhase.TrackingUnavailable",
-        "movedPage"
+        "navigate.move"
       ],
       "design_refs": [
+        "state:finger-choosing",
         "state:hand-searching",
         "state:ring-worn",
         "state:tracking-unavailable",
+        "transition:finger-confirmed",
         "transition:hand-found",
         "transition:hand-lost",
+        "transition:change-finger-searching",
+        "transition:change-finger-worn",
         "transition:tracking-denied",
-        "action:show-next-page",
-        "action:show-previous-page",
+        "action:select-finger",
+        "action:confirm-finger",
+        "action:change-finger",
         "action:enter-ring-worn",
         "action:leave-ring-worn",
-        "action:enter-tracking-unavailable"
+        "action:enter-tracking-unavailable",
+        "action:show-next-page",
+        "action:show-previous-page",
+        "action:open-item",
+        "action:go-back",
+        "action:button-next",
+        "action:button-previous",
+        "action:button-confirm",
+        "action:button-back"
       ]
     },
     {
-      "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/data/repository/RingPageRepository.kt",
+      "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/data/repository/RingMenuRepository.kt",
       "symbols": [
-        "BundledRingPageRepository"
+        "BundledRingMenuRepository"
       ],
       "evidence": [
-        "pages/page_gem.png",
-        "pages/page_clock.png",
-        "pages/page_pet.png"
+        "home-pet",
+        "face-gem-dragon",
+        "circuit-beat"
       ],
       "design_refs": [
-        "asset:page-gem",
-        "asset:page-clock",
-        "asset:page-pet",
         "data-case:normal",
         "data-case:fallback",
         "data-case:error"
@@ -99,7 +197,7 @@
     }
   ],
   "implementation": {
-    "initialStateId": "hand-searching",
+    "initialStateId": "finger-choosing",
     "surfaces": {
       "stage-scene": {
         "type": "stage_mixed",
@@ -124,8 +222,23 @@
         "rootNodeId": "stage-root",
         "placement": {
           "anchor": "user hand",
-          "hintPanelDistanceM": 0.8,
-          "hintPanelHeightOffsetM": -0.1
+          "centerPanelM": [
+            0,
+            1.5,
+            -0.8
+          ],
+          "guidePanelM": [
+            0.34,
+            1.5,
+            -0.85
+          ],
+          "guidePanelYawRad": -0.38,
+          "controlPanelM": [
+            -0.34,
+            1.5,
+            -0.85
+          ],
+          "controlPanelYawRad": 0.38
         }
       }
     },
@@ -139,8 +252,11 @@
         },
         "children": [
           "ring-on-hand",
+          "finger-panel",
           "hand-hint",
-          "tracking-message"
+          "tracking-message",
+          "gesture-guide",
+          "control-panel"
         ]
       },
       "ring-on-hand": {
@@ -148,27 +264,186 @@
         "rendererKey": "ring-on-hand",
         "assetId": "ring-model",
         "props": {
-          "joint": "ring finger, first segment above the palm",
-          "fallbackJointWhenLost": "keep last pose for 0.3 s, then hide",
-          "displayScale": 1.5,
-          "tiltTriggerDeg": 25,
-          "tiltResetDeg": 10
+          "joint": "first segment of the chosen finger, on whichever hand is raised",
+          "lostHandDelayMs": 300,
+          "displayScale": 3.5,
+          "tipEnterDeg": 25,
+          "tipExitDeg": 10,
+          "tipHoldMs": 80,
+          "doubleClickWaitMs": 450,
+          "clickQuietMs": 300,
+          "tipResettleMs": 1500,
+          "nextDipGapMs": 120
         },
         "bindings": {
-          "pages": "data.pages",
-          "activePageIndex": "state.activePageIndex"
+          "menu": "data.menu",
+          "cursor": "state.menu",
+          "finger": "state.finger"
         },
         "events": {
           "handFound": "enter-ring-worn",
           "handLost": "leave-ring-worn",
           "trackingDenied": "enter-tracking-unavailable",
-          "tiltForward": "show-next-page",
-          "tiltBack": "show-previous-page"
+          "tipRight": "show-next-page",
+          "tipLeft": "show-previous-page",
+          "airClick": "open-item",
+          "airDoubleClick": "go-back"
         },
         "visibleInStates": [
           "ring-worn"
         ],
         "accessibilityLabel": "Gemtronic ring"
+      },
+      "finger-panel": {
+        "kind": "text",
+        "content": "Tap the finger wearing the ring",
+        "layout": {
+          "mode": "column",
+          "gapDp": 16,
+          "paddingDp": 24,
+          "widthDp": 440
+        },
+        "appearance": {
+          "fill": "ringScreenBase",
+          "radiusDp": 24,
+          "foreground": "labelPrimaryLight"
+        },
+        "textStyle": {
+          "typography": "title",
+          "color": "labelPrimaryLight"
+        },
+        "children": [
+          "hand-picker",
+          "wear-button"
+        ],
+        "visibleInStates": [
+          "finger-choosing"
+        ]
+      },
+      "hand-picker": {
+        "kind": "domain_visual",
+        "rendererKey": "hand-picker",
+        "props": {
+          "fingers": [
+            "thumb",
+            "index",
+            "middle",
+            "ring",
+            "little"
+          ],
+          "default": "index",
+          "widthDp": 392,
+          "heightDp": 420
+        },
+        "bindings": {
+          "selected": "state.finger"
+        },
+        "events": {
+          "tapFinger": "select-finger"
+        },
+        "accessibilityLabel": "Hand shape for choosing a finger"
+      },
+      "wear-button": {
+        "kind": "spatialui",
+        "component": "sui-button",
+        "content": "Put on the ring",
+        "events": {
+          "click": "confirm-finger"
+        }
+      },
+      "gesture-guide": {
+        "kind": "text",
+        "content": "Same gestures as the real ring",
+        "layout": {
+          "mode": "column",
+          "gapDp": 16,
+          "paddingDp": 24,
+          "widthDp": 380
+        },
+        "appearance": {
+          "fill": "ringScreenBase",
+          "radiusDp": 24,
+          "foreground": "labelPrimaryLight"
+        },
+        "textStyle": {
+          "typography": "title",
+          "color": "labelPrimaryLight"
+        },
+        "children": [
+          "ring-mirror",
+          "guide-next",
+          "guide-previous",
+          "guide-open",
+          "guide-back",
+          "guide-click",
+          "change-finger-button"
+        ],
+        "visibleInStates": [
+          "hand-searching",
+          "ring-worn"
+        ]
+      },
+      "ring-mirror": {
+        "kind": "domain_visual",
+        "rendererKey": "ring-mirror",
+        "props": {
+          "sizeDp": 200
+        },
+        "bindings": {
+          "cursor": "state.menu"
+        },
+        "accessibilityLabel": "Large copy of the ring screen"
+      },
+      "guide-next": {
+        "kind": "text",
+        "content": "Next: tip the ring down to the right",
+        "textStyle": {
+          "typography": "body",
+          "color": "labelPrimaryLight"
+        }
+      },
+      "guide-previous": {
+        "kind": "text",
+        "content": "Previous: tip the ring down to the left",
+        "textStyle": {
+          "typography": "body",
+          "color": "labelPrimaryLight"
+        }
+      },
+      "guide-open": {
+        "kind": "text",
+        "content": "Open: click once in the air",
+        "textStyle": {
+          "typography": "body",
+          "color": "labelPrimaryLight"
+        }
+      },
+      "guide-back": {
+        "kind": "text",
+        "content": "Back: click twice in the air",
+        "textStyle": {
+          "typography": "body",
+          "color": "labelPrimaryLight"
+        }
+      },
+      "guide-click": {
+        "kind": "text",
+        "content": "To click in the air, dip your hand sharply and stop.",
+        "textStyle": {
+          "typography": "body",
+          "color": "labelPrimaryLight"
+        }
+      },
+      "change-finger-button": {
+        "kind": "spatialui",
+        "component": "sui-button",
+        "content": "Change finger",
+        "props": {
+          "variant": "secondary"
+        },
+        "events": {
+          "click": "change-finger"
+        }
       },
       "hand-hint": {
         "kind": "spatialui",
@@ -210,9 +485,88 @@
         "visibleInStates": [
           "tracking-unavailable"
         ]
+      },
+      "control-panel": {
+        "kind": "text",
+        "content": "Controls",
+        "layout": {
+          "mode": "column",
+          "gapDp": 16,
+          "paddingDp": 24,
+          "widthDp": 300,
+          "align": "center"
+        },
+        "appearance": {
+          "fill": "ringScreenBase",
+          "radiusDp": 24,
+          "foreground": "labelPrimaryLight"
+        },
+        "textStyle": {
+          "typography": "title",
+          "color": "labelPrimaryLight"
+        },
+        "children": [
+          "control-arrows",
+          "confirm-button",
+          "back-button"
+        ],
+        "visibleInStates": [
+          "hand-searching",
+          "ring-worn"
+        ]
+      },
+      "control-arrows": {
+        "kind": "layout",
+        "layout": {
+          "mode": "row",
+          "gapDp": 16
+        },
+        "children": [
+          "previous-button",
+          "next-button"
+        ]
+      },
+      "previous-button": {
+        "kind": "spatialui",
+        "component": "sui-icon-button",
+        "assetId": "icon-arrow-left",
+        "events": {
+          "click": "button-previous"
+        },
+        "accessibilityLabel": "Previous"
+      },
+      "next-button": {
+        "kind": "spatialui",
+        "component": "sui-icon-button",
+        "assetId": "icon-arrow-right",
+        "events": {
+          "click": "button-next"
+        },
+        "accessibilityLabel": "Next"
+      },
+      "confirm-button": {
+        "kind": "spatialui",
+        "component": "sui-button",
+        "content": "Confirm",
+        "events": {
+          "click": "button-confirm"
+        }
+      },
+      "back-button": {
+        "kind": "spatialui",
+        "component": "sui-button",
+        "content": "Back",
+        "events": {
+          "click": "button-back"
+        }
       }
     },
     "states": {
+      "finger-choosing": {
+        "surfaceRoots": {
+          "stage-scene": "stage-root"
+        }
+      },
       "hand-searching": {
         "surfaceRoots": {
           "stage-scene": "stage-root"
@@ -230,6 +584,14 @@
       }
     },
     "transitions": {
+      "finger-confirmed": {
+        "from": "finger-choosing",
+        "to": "hand-searching",
+        "trigger": {
+          "nodeId": "wear-button",
+          "event": "click"
+        }
+      },
       "hand-found": {
         "from": "hand-searching",
         "to": "ring-worn",
@@ -246,6 +608,22 @@
           "event": "handLost"
         }
       },
+      "change-finger-searching": {
+        "from": "hand-searching",
+        "to": "finger-choosing",
+        "trigger": {
+          "nodeId": "change-finger-button",
+          "event": "click"
+        }
+      },
+      "change-finger-worn": {
+        "from": "ring-worn",
+        "to": "finger-choosing",
+        "trigger": {
+          "nodeId": "change-finger-button",
+          "event": "click"
+        }
+      },
       "tracking-denied": {
         "from": "hand-searching",
         "to": "tracking-unavailable",
@@ -256,15 +634,17 @@
       }
     },
     "actions": {
-      "show-next-page": {
-        "type": "increment",
-        "binding": "state.activePageIndex",
-        "value": 1
+      "select-finger": {
+        "type": "set",
+        "binding": "state.finger"
       },
-      "show-previous-page": {
-        "type": "increment",
-        "binding": "state.activePageIndex",
-        "value": -1
+      "confirm-finger": {
+        "type": "transition",
+        "transitionId": "finger-confirmed"
+      },
+      "change-finger": {
+        "type": "transition",
+        "transitionId": "change-finger-worn"
       },
       "enter-ring-worn": {
         "type": "transition",
@@ -277,6 +657,42 @@
       "enter-tracking-unavailable": {
         "type": "transition",
         "transitionId": "tracking-denied"
+      },
+      "show-next-page": {
+        "type": "increment",
+        "binding": "state.menu.index",
+        "value": 1
+      },
+      "show-previous-page": {
+        "type": "increment",
+        "binding": "state.menu.index",
+        "value": -1
+      },
+      "open-item": {
+        "type": "custom",
+        "binding": "state.menu"
+      },
+      "go-back": {
+        "type": "custom",
+        "binding": "state.menu"
+      },
+      "button-next": {
+        "type": "increment",
+        "binding": "state.menu.index",
+        "value": 1
+      },
+      "button-previous": {
+        "type": "increment",
+        "binding": "state.menu.index",
+        "value": -1
+      },
+      "button-confirm": {
+        "type": "custom",
+        "binding": "state.menu"
+      },
+      "button-back": {
+        "type": "custom",
+        "binding": "state.menu"
       }
     },
     "responsiveRules": {},
@@ -291,20 +707,140 @@
         "src": "ring.glb",
         "alt": "Gemtronic ring"
       },
-      "page-gem": {
+      "frame-idle": {
         "kind": "image",
-        "src": "page_gem.png",
-        "alt": "Dragon gem"
+        "src": "pages/idle.png",
+        "alt": "Idle"
       },
-      "page-clock": {
+      "frame-home-pet": {
         "kind": "image",
-        "src": "page_clock.png",
-        "alt": "Clock"
+        "src": "pages/home-pet.png",
+        "alt": "Home pet"
       },
-      "page-pet": {
+      "frame-home-game": {
         "kind": "image",
-        "src": "page_pet.png",
-        "alt": "Pet"
+        "src": "pages/home-game.png",
+        "alt": "Home game"
+      },
+      "frame-home-exercise": {
+        "kind": "image",
+        "src": "pages/home-exercise.png",
+        "alt": "Home exercise"
+      },
+      "frame-home-rhythm": {
+        "kind": "image",
+        "src": "pages/home-rhythm.png",
+        "alt": "Home rhythm"
+      },
+      "frame-home-settings": {
+        "kind": "image",
+        "src": "pages/home-settings.png",
+        "alt": "Home settings"
+      },
+      "frame-idle-gem": {
+        "kind": "image",
+        "src": "pages/idle-gem.png",
+        "alt": "Idle gem"
+      },
+      "frame-idle-clock": {
+        "kind": "image",
+        "src": "pages/idle-clock.png",
+        "alt": "Idle clock"
+      },
+      "frame-idle-rest": {
+        "kind": "image",
+        "src": "pages/idle-rest.png",
+        "alt": "Idle rest"
+      },
+      "frame-face-gem-dragon": {
+        "kind": "image",
+        "src": "pages/face-gem-dragon.png",
+        "alt": "Face gem dragon"
+      },
+      "frame-face-clock-network": {
+        "kind": "image",
+        "src": "pages/face-clock-network.png",
+        "alt": "Face clock network"
+      },
+      "frame-face-rest": {
+        "kind": "image",
+        "src": "pages/face-rest.png",
+        "alt": "Face rest"
+      },
+      "frame-pet-egg": {
+        "kind": "image",
+        "src": "pages/pet-egg.png",
+        "alt": "Pet egg"
+      },
+      "frame-game-menu": {
+        "kind": "image",
+        "src": "pages/game-menu.png",
+        "alt": "Game menu"
+      },
+      "frame-game-menu-dice": {
+        "kind": "image",
+        "src": "pages/game-menu-dice.png",
+        "alt": "Game menu dice"
+      },
+      "frame-game-play": {
+        "kind": "image",
+        "src": "pages/game-play.png",
+        "alt": "Game play"
+      },
+      "frame-dice-ready": {
+        "kind": "image",
+        "src": "pages/dice-ready.png",
+        "alt": "Dice ready"
+      },
+      "frame-exercise-walking": {
+        "kind": "image",
+        "src": "pages/exercise-walking.png",
+        "alt": "Exercise walking"
+      },
+      "frame-rhythm-menu": {
+        "kind": "image",
+        "src": "pages/rhythm-menu.png",
+        "alt": "Rhythm menu"
+      },
+      "frame-rhythm-menu-wave": {
+        "kind": "image",
+        "src": "pages/rhythm-menu-wave.png",
+        "alt": "Rhythm menu wave"
+      },
+      "frame-rhythm-menu-circuit": {
+        "kind": "image",
+        "src": "pages/rhythm-menu-circuit.png",
+        "alt": "Rhythm menu circuit"
+      },
+      "frame-rhythm-strike": {
+        "kind": "image",
+        "src": "pages/rhythm-strike.png",
+        "alt": "Rhythm strike"
+      },
+      "frame-wave-beat": {
+        "kind": "image",
+        "src": "pages/wave-beat.png",
+        "alt": "Wave beat"
+      },
+      "frame-circuit-beat": {
+        "kind": "image",
+        "src": "pages/circuit-beat.png",
+        "alt": "Circuit beat"
+      },
+      "frame-settings": {
+        "kind": "image",
+        "src": "pages/settings.png",
+        "alt": "Settings"
+      },
+      "icon-arrow-left": {
+        "kind": "icon",
+        "src": "icon70://7.0/ic_arrow_left",
+        "alt": "Previous"
+      },
+      "icon-arrow-right": {
+        "kind": "icon",
+        "src": "icon70://7.0/ic_arrow_right",
+        "alt": "Next"
       }
     }
   }

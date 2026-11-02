@@ -19,22 +19,28 @@ actions = {a["id"]: {k: v for k, v in a.items() if k in ("type", "transitionId",
 assets = {a["id"]: {k: a[k] for k in ("kind", "src", "alt") if k in a} for a in spec["assets"]}
 
 mappings = [
-    {"file": SRC + "ui/ringwear/components/RingOnHand.kt", "symbols": ["RingOnHand", "wearOnFinger"],
-     "evidence": ["HandTrackingProvider", "attachments.entity(HINT_PANEL_ID)", "RING_PROXIMAL"],
+    {"file": SRC + "ui/ringwear/components/RingOnHand.kt", "symbols": ["RingOnHand", "wearOnFinger", "RaisedHand"],
+     "evidence": ["HandTrackingProvider", "GUIDE_PANEL_POSITION", "fingerSegment"],
      "design_refs": ["state-model:initial", "surface:stage-scene", "node:stage-root", "node:ring-on-hand"]},
     {"file": SRC + "ui/ringwear/components/RingRig.kt", "symbols": ["RingRig"],
      "evidence": ["DISPLAY_SCALE", "asset://ring.glb", "SCREEN_DIAMETER_MM"],
-     "design_refs": ["asset:ring-model"]},
-    {"file": SRC + "ui/ringwear/components/HintPanel.kt", "symbols": ["HandHint", "TrackingMessage"],
-     "evidence": ["hand_hint", "tracking_message", "GemtronicColors.ringScreenBase"],
-     "design_refs": ["node:hand-hint", "node:tracking-message"]},
+     "design_refs": ["asset:ring-model"] + ["asset:" + a["id"] for a in spec["assets"] if a["kind"] == "image"]},
+    {"file": SRC + "ui/ringwear/components/RingMirror.kt", "symbols": ["RingMirror"],
+     "evidence": ["MirrorSize", "FilterQuality.None"],
+     "design_refs": ["node:ring-mirror"]},
+    {"file": SRC + "ui/ringwear/components/HandPicker.kt", "symbols": ["HandPicker", "HandFinger"],
+     "evidence": ["FingerSpots", "spatialHoverEffect", "drawRingMark"],
+     "design_refs": ["node:hand-picker"]},
+    {"file": SRC + "ui/ringwear/components/HintPanel.kt", "symbols": ["FingerPanel", "GestureGuide", "ControlPanel", "ArrowButton", "HandHint", "TrackingMessage"],
+     "evidence": ["control_title", "confirm_button", "back_button", "ic_arrow_left", "ic_arrow_right", "finger_title", "guide_next", "guide_previous", "guide_open", "guide_back", "guide_click", "wear_button", "change_finger", "hand_hint", "tracking_message"],
+     "design_refs": ["node:finger-panel", "node:wear-button", "node:gesture-guide", "node:guide-next", "node:guide-previous", "node:guide-open", "node:guide-back", "node:guide-click", "node:change-finger-button", "node:hand-hint", "node:tracking-message", "node:control-panel", "node:control-arrows", "node:previous-button", "node:next-button", "node:confirm-button", "node:back-button", "asset:icon-arrow-left", "asset:icon-arrow-right"]},
     {"file": SRC + "ui/ringwear/RingWearViewModel.kt", "symbols": ["RingWearViewModel"],
-     "evidence": ["RingPhase.RingWorn", "RingPhase.HandSearching", "RingPhase.TrackingUnavailable", "movedPage"],
+     "evidence": ["RingPhase.FingerChoosing", "RingPhase.RingWorn", "RingPhase.HandSearching", "RingPhase.TrackingUnavailable", "navigate.move"],
      "design_refs": ["state:" + s["id"] for s in spec["states"]] + ["transition:" + t["id"] for t in spec["transitions"]]
      + ["action:" + a["id"] for a in spec["actions"]]},
-    {"file": SRC + "data/repository/RingPageRepository.kt", "symbols": ["BundledRingPageRepository"],
-     "evidence": ["pages/page_gem.png", "pages/page_clock.png", "pages/page_pet.png"],
-     "design_refs": ["asset:page-gem", "asset:page-clock", "asset:page-pet", "data-case:normal", "data-case:fallback", "data-case:error"]},
+    {"file": SRC + "data/repository/RingMenuRepository.kt", "symbols": ["BundledRingMenuRepository"],
+     "evidence": ["home-pet", "face-gem-dragon", "circuit-beat"],
+     "design_refs": ["data-case:normal", "data-case:fallback", "data-case:error"]},
 ]
 
 receipt = {

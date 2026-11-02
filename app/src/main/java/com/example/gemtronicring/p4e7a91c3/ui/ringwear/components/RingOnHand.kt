@@ -1,5 +1,6 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear.components
 
+import android.os.SystemClock
 import android.util.Log
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -12,12 +13,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.example.gemtronicring.p4e7a91c3.domain.model.JointRotation
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingSample
+import com.example.gemtronicring.p4e7a91c3.domain.model.WornFinger
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearUiState
 import com.pico.spatial.core.ecs.Entity
 import com.pico.spatial.core.ecs.TransformComponent
+import com.pico.spatial.core.math.Quat
 import com.pico.spatial.core.math.Vector3
 import com.pico.spatial.tracking.DataProvider
 import com.pico.spatial.tracking.hand.HandJoint
@@ -28,16 +31,47 @@ import com.pico.spatial.ui.foundation.content.SpatialView
 import kotlinx.coroutines.delay
 
 private const val TAG = "GemtronicRing"
-private const val HINT_PANEL_ID = "hint-panel"
+private const val CENTER_PANEL_ID = "center-panel"
+private const val GUIDE_PANEL_ID = "gesture-guide"
+private const val CONTROL_PANEL_ID = "control-panel"
 private const val HAND_LOST_DELAY_MS = 300L
 
-// The first segment of the ring finger, where a ring sits.
-private val BASE_JOINT = HandJoint.Index.RING_PROXIMAL
-private val NEXT_JOINT = HandJoint.Index.RING_INTERMEDIATE
+private val CENTER_PANEL_POSITION = Vector3(0f, 1.5f, -0.8f)
+private val GUIDE_PANEL_POSITION = Vector3(0.34f, 1.5f, -0.85f)
+private val GUIDE_PANEL_ROTATION = Quat(Vector3(0f, 1f, 0f), -0.38f)
+private val CONTROL_PANEL_POSITION = Vector3(-0.34f, 1.5f, -0.85f)
+private val CONTROL_PANEL_ROTATION = Quat(Vector3(0f, 1f, 0f), 0.38f)
+private val RING_RIGHT_AXIS = Vector3(1f, 0f, 0f)
 
-private val HINT_PANEL_POSITION = Vector3(0f, 1.4f, -0.8f)
+/** The first segment of a finger, where a ring sits. */
+private fun fingerSegment(finger: WornFinger): Pair<HandJoint.Index, HandJoint.Index> =
+    when (finger) {
+        WornFinger.Thumb -> HandJoint.Index.THUMB_PROXIMAL to HandJoint.Index.THUMB_DISTAL
+        WornFinger.Index -> HandJoint.Index.INDEX_PROXIMAL to HandJoint.Index.INDEX_INTERMEDIATE
+        WornFinger.Middle -> HandJoint.Index.MIDDLE_PROXIMAL to HandJoint.Index.MIDDLE_INTERMEDIATE
+        WornFinger.Ring -> HandJoint.Index.RING_PROXIMAL to HandJoint.Index.RING_INTERMEDIATE
+        WornFinger.Little -> HandJoint.Index.LITTLE_PROXIMAL to HandJoint.Index.LITTLE_INTERMEDIATE
+    }
 
-/** Stage root of the app: reads the hand, wears the ring on it, and shows the hint when needed. */
+private fun segmentMiddle(hand: HandPose, finger: WornFinger): Vector3 {
+    val (base, next) = fingerSegment(finger)
+    val a = hand[base].position
+    val b = hand[next].position
+    return Vector3((a.x + b.x) / 2f, (a.y + b.y) / 2f, (a.z + b.z) / 2f)
+}
+
+/** Keeps the ring on the hand that was raised first, until that hand goes away. */
+private class RaisedHand {
+    private var usingRight = true
+
+    fun pick(data: HandTrackingData): HandPose? {
+        if (usingRight && data.right == null && data.left != null) usingRight = false
+        if (!usingRight && data.left == null && data.right != null) usingRight = true
+        return if (usingRight) data.right else data.left
+    }
+}
+
+/** Stage root of the app: reads the hand, wears the ring on it, and hosts the panels. */
 @Composable
 internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit) {
     val provider = remember { HandTrackingProvider() }
@@ -52,16 +86,20 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         onDispose { provider.stop() }
     }
 
-    val hand = data.right ?: data.left
-    val isLeftHand = data.right == null
+    val raisedHand = remember { RaisedHand() }
+    val hand = raisedHand.pick(data)
 
     LaunchedEffect(hand) {
         val pose = hand ?: return@LaunchedEffect
-        val rotation = pose[BASE_JOINT].rotation
+        // Gestures read the worn finger, as the sensor in the real ring does.
+        val (base, _) = fingerSegment(state.finger)
         currentOnEvent(
             RingWearEvent.HandMoved(
-                JointRotation(rotation.x, rotation.y, rotation.z, rotation.w),
-                isLeftHand,
+                RingSample(
+                    timeMs = SystemClock.elapsedRealtime(),
+                    rightAxisUp = pose[base].rotation.rotateVector(RING_RIGHT_AXIS).y,
+                    heightM = segmentMiddle(pose, state.finger).y,
+                )
             )
         )
     }
@@ -76,9 +114,9 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
 
     var rig by remember { mutableStateOf<RingRig?>(null) }
     val stageRoot = remember { Entity() }
-    LaunchedEffect(state.pages) {
-        if (state.pages.isEmpty() || rig != null) return@LaunchedEffect
-        runCatching { RingRig.create(state.pages) }
+    LaunchedEffect(state.frames) {
+        if (state.frames.isEmpty() || rig != null) return@LaunchedEffect
+        runCatching { RingRig.create(state.frames) }
             .onSuccess {
                 stageRoot.addChild(it.root)
                 rig = it
@@ -88,36 +126,51 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
 
     SpatialView(
         modifier = Modifier.fillMaxSize(),
-        attachments = { AttachmentPanel(HINT_PANEL_ID) { HintPanel(phase = state.phase) } },
+        attachments = {
+            AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, onEvent) }
+            AttachmentPanel(GUIDE_PANEL_ID) { GestureGuide(state.activeFrame, onEvent) }
+            AttachmentPanel(CONTROL_PANEL_ID) { ControlPanel(onEvent) }
+        },
         update = { _, attachments ->
-            attachments.entity(HINT_PANEL_ID)?.enabled = state.phase != RingPhase.RingWorn
+            attachments.entity(CENTER_PANEL_ID)?.enabled = state.phase != RingPhase.RingWorn
+            val ringInUse =
+                state.phase == RingPhase.HandSearching || state.phase == RingPhase.RingWorn
+            attachments.entity(GUIDE_PANEL_ID)?.enabled = ringInUse
+            attachments.entity(CONTROL_PANEL_ID)?.enabled = ringInUse
             rig?.let { ring ->
-                ring.showPage(state.activePageIndex)
+                ring.showFrame(state.activeFrame)
                 ring.root.enabled = state.phase == RingPhase.RingWorn
-                if (hand != null) wearOnFinger(ring.root, stageRoot, hand)
+                if (hand != null) wearOnFinger(ring.root, stageRoot, hand, state.finger)
             }
         },
     ) { content, attachments ->
         content.addEntity(stageRoot)
-        attachments.entity(HINT_PANEL_ID)?.apply {
-            components[TransformComponent::class.java]?.setPosition(HINT_PANEL_POSITION)
+        attachments.entity(CENTER_PANEL_ID)?.apply {
+            components[TransformComponent::class.java]?.setPosition(CENTER_PANEL_POSITION)
+            stageRoot.addChild(this)
+        }
+        attachments.entity(GUIDE_PANEL_ID)?.apply {
+            components[TransformComponent::class.java]?.apply {
+                setPosition(GUIDE_PANEL_POSITION)
+                setQuaternion(GUIDE_PANEL_ROTATION)
+            }
+            stageRoot.addChild(this)
+        }
+        attachments.entity(CONTROL_PANEL_ID)?.apply {
+            components[TransformComponent::class.java]?.apply {
+                setPosition(CONTROL_PANEL_POSITION)
+                setQuaternion(CONTROL_PANEL_ROTATION)
+            }
             stageRoot.addChild(this)
         }
     }
 }
 
 /** Centres the ring on the finger segment; the joint's own axes line up with the ring's. */
-private fun wearOnFinger(ring: Entity, parent: Entity, hand: HandPose) {
-    val base = hand[BASE_JOINT]
-    val next = hand[NEXT_JOINT]
-    val middle =
-        Vector3(
-            (base.position.x + next.position.x) / 2f,
-            (base.position.y + next.position.y) / 2f,
-            (base.position.z + next.position.z) / 2f,
-        )
+private fun wearOnFinger(ring: Entity, parent: Entity, hand: HandPose, finger: WornFinger) {
+    val (base, _) = fingerSegment(finger)
     ring.components[TransformComponent::class.java]?.apply {
-        setPosition(parent.convertPositionFrom(middle, null))
-        setQuaternion(parent.convertRotationFrom(base.rotation, null))
+        setPosition(parent.convertPositionFrom(segmentMiddle(hand, finger), null))
+        setQuaternion(parent.convertRotationFrom(hand[base].rotation, null))
     }
 }
