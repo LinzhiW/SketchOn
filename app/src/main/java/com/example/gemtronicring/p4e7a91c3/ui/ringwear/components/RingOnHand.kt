@@ -20,7 +20,6 @@ import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearUiState
 import com.pico.spatial.core.ecs.Entity
 import com.pico.spatial.core.ecs.TransformComponent
-import com.pico.spatial.core.math.Quat
 import com.pico.spatial.core.math.Vector3
 import com.pico.spatial.tracking.DataProvider
 import com.pico.spatial.tracking.hand.HandJoint
@@ -31,16 +30,13 @@ import com.pico.spatial.ui.foundation.content.SpatialView
 import kotlinx.coroutines.delay
 
 private const val TAG = "GemtronicRing"
-private const val CENTER_PANEL_ID = "center-panel"
-private const val GUIDE_PANEL_ID = "gesture-guide"
-private const val CONTROL_PANEL_ID = "control-panel"
 private const val HAND_LOST_DELAY_MS = 300L
 
-private val CENTER_PANEL_POSITION = Vector3(0f, 1.5f, -0.8f)
-private val GUIDE_PANEL_POSITION = Vector3(0.34f, 1.5f, -0.85f)
-private val GUIDE_PANEL_ROTATION = Quat(Vector3(0f, 1f, 0f), -0.38f)
-private val CONTROL_PANEL_POSITION = Vector3(-0.34f, 1.5f, -0.85f)
-private val CONTROL_PANEL_ROTATION = Quat(Vector3(0f, 1f, 0f), 0.38f)
+// One panel only. Focus moving between two attachment panels is never acknowledged, and the system
+// then reports the app as not responding.
+private const val RING_PANEL_ID = "ring-panel"
+
+private val RING_PANEL_POSITION = Vector3(0f, 1.5f, -0.85f)
 private val RING_RIGHT_AXIS = Vector3(1f, 0f, 0f)
 
 /** The first segment of a finger, where a ring sits. */
@@ -126,17 +122,8 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
 
     SpatialView(
         modifier = Modifier.fillMaxSize(),
-        attachments = {
-            AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, onEvent) }
-            AttachmentPanel(GUIDE_PANEL_ID) { GestureGuide(state.activeFrame, onEvent) }
-            AttachmentPanel(CONTROL_PANEL_ID) { ControlPanel(onEvent) }
-        },
-        update = { _, attachments ->
-            attachments.entity(CENTER_PANEL_ID)?.enabled = state.phase != RingPhase.RingWorn
-            val ringInUse =
-                state.phase == RingPhase.HandSearching || state.phase == RingPhase.RingWorn
-            attachments.entity(GUIDE_PANEL_ID)?.enabled = ringInUse
-            attachments.entity(CONTROL_PANEL_ID)?.enabled = ringInUse
+        attachments = { AttachmentPanel(RING_PANEL_ID) { RingPanels(state, onEvent) } },
+        update = { _, _ ->
             rig?.let { ring ->
                 ring.showFrame(state.activeFrame)
                 ring.root.enabled = state.phase == RingPhase.RingWorn
@@ -145,22 +132,8 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         },
     ) { content, attachments ->
         content.addEntity(stageRoot)
-        attachments.entity(CENTER_PANEL_ID)?.apply {
-            components[TransformComponent::class.java]?.setPosition(CENTER_PANEL_POSITION)
-            stageRoot.addChild(this)
-        }
-        attachments.entity(GUIDE_PANEL_ID)?.apply {
-            components[TransformComponent::class.java]?.apply {
-                setPosition(GUIDE_PANEL_POSITION)
-                setQuaternion(GUIDE_PANEL_ROTATION)
-            }
-            stageRoot.addChild(this)
-        }
-        attachments.entity(CONTROL_PANEL_ID)?.apply {
-            components[TransformComponent::class.java]?.apply {
-                setPosition(CONTROL_PANEL_POSITION)
-                setQuaternion(CONTROL_PANEL_ROTATION)
-            }
+        attachments.entity(RING_PANEL_ID)?.apply {
+            components[TransformComponent::class.java]?.setPosition(RING_PANEL_POSITION)
             stageRoot.addChild(this)
         }
     }

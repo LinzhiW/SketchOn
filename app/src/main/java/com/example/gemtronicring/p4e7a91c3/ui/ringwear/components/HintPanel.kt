@@ -2,6 +2,7 @@ package com.example.gemtronicring.p4e7a91c3.ui.ringwear.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -32,20 +33,31 @@ import com.pico.spatial.ui.design.Text
 private val PanelShape = RoundedCornerShape(24.dp)
 private val PanelWidth = 440.dp
 private val GuideWidth = 380.dp
+private val RingGap = 420.dp
 private val ControlWidth = 300.dp
 private val ArrowButtonSize = 80.dp
 private val MessageMaxWidth = 480.dp
 private val PanelGap = 16.dp
 private val PanelPadding = 24.dp
 
-/** The panel in front of the user: finger choice first, then whatever the ring needs next. */
+/**
+ * Everything 2D, in one panel: the finger choice first, then buttons on the left and the gesture
+ * guide on the right, with a gap in the middle for the ring.
+ */
 @Composable
-internal fun CenterPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit) {
+internal fun RingPanels(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit) {
     when (state.phase) {
         RingPhase.FingerChoosing -> FingerPanel(state, onEvent)
-        RingPhase.HandSearching -> HandHint()
         RingPhase.TrackingUnavailable -> TrackingMessage()
-        RingPhase.RingWorn -> Unit
+        RingPhase.HandSearching,
+        RingPhase.RingWorn ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ControlPanel(onEvent)
+                Box(Modifier.width(RingGap), contentAlignment = Alignment.Center) {
+                    if (state.phase == RingPhase.HandSearching) HandHint()
+                }
+                GestureGuide(state.activeFrame, onEvent)
+            }
     }
 }
 
@@ -69,7 +81,7 @@ private fun FingerPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
 
 /** The left panel: buttons for the same four inputs, for when a gesture is not picked up. */
 @Composable
-internal fun ControlPanel(onEvent: (RingWearEvent) -> Unit) {
+private fun ControlPanel(onEvent: (RingWearEvent) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(PanelGap),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -116,7 +128,7 @@ private fun ArrowButton(iconRes: Int, labelRes: Int, onClick: () -> Unit) {
 
 /** The right panel: the real ring's four gestures. */
 @Composable
-internal fun GestureGuide(frame: String?, onEvent: (RingWearEvent) -> Unit) {
+private fun GestureGuide(frame: String?, onEvent: (RingWearEvent) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(PanelGap),
         modifier =

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "design_spec": {
     "path": "design-spec.json",
-    "sha256": "50a4438270a81d2127205fa48be4c8d47c5c7f07f0e2b98f2f1df24bc6c50a79"
+    "sha256": "499c0ef5d2f46d7e45dcafdc047c1d481c1e7c0618ec471ca77a4809a806eabd"
   },
   "source_mappings": [
     {
@@ -14,7 +14,7 @@
       ],
       "evidence": [
         "HandTrackingProvider",
-        "GUIDE_PANEL_POSITION",
+        "RING_PANEL_POSITION",
         "fingerSegment"
       ],
       "design_refs": [
@@ -94,6 +94,7 @@
     {
       "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/ui/ringwear/components/HintPanel.kt",
       "symbols": [
+        "RingPanels",
         "FingerPanel",
         "GestureGuide",
         "ControlPanel",
@@ -222,23 +223,12 @@
         "rootNodeId": "stage-root",
         "placement": {
           "anchor": "user hand",
-          "centerPanelM": [
+          "panelM": [
             0,
             1.5,
-            -0.8
-          ],
-          "guidePanelM": [
-            0.34,
-            1.5,
             -0.85
           ],
-          "guidePanelYawRad": -0.38,
-          "controlPanelM": [
-            -0.34,
-            1.5,
-            -0.85
-          ],
-          "controlPanelYawRad": 0.38
+          "ringGapDp": 420
         }
       }
     },

@@ -57,7 +57,7 @@ Volumetric window. A large ring on a turntable, driven by hand tilt from a dista
 
 ## 3 · Plan
 
-**Executable spec** — `design-spec.json`, schema version `1.0`, revision `9`.
+**Executable spec** — `design-spec.json`, schema version `1.0`, revision `10`.
 
 ### Visual tokens
 
@@ -199,6 +199,7 @@ real room
 | 6 | The ring screen was unreadable at arm's length | `displayScale` and new `ring-mirror` | Screen always readable | 7 | Yes |
 | 7 | Gestures need large movements on the emulator, so they cannot be the only input | New `control-panel` on the left; ring at 3.5x | A reliable way to use the ring | 8 | Yes |
 | 8 | 3.5x was too large on the hand | `displayScale` | Ring fits better | 9 | Yes |
+| 9 | Focus moving between panels made the system report the app as not responding | All panels moved into one window | No more dialog | 10 | Yes |
 
 **Device validation** — `not_performed` (Web validates logic and layout only; real-device comfort, occlusion, size and performance are not verified).
 

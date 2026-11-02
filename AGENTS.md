@@ -28,6 +28,7 @@ A PICO Spatial app that puts the Gemtronic smart ring on the wearer's real hand.
 - `ring.glb` units are millimetres. The ring hole runs along model Z, centre about (-0.21, -8.02), inner radius about 8 mm.
 - Joint axes were measured on the emulator: -Z runs along the finger toward the tip, +Y faces the back of the hand. The ring model is turned half a turn so the charging port sits at the bottom.
 - Load textures off the main thread. Each takes about a second on the main thread, and 25 of them froze the app until the system reported it as not responding.
+- Keep all 2D UI in one AttachmentPanel. With several panels, moving focus between them left their windows unresponsive (`dumpsys input` showed FocusEvent stuck in WaitQueue), and the system reported the app as not responding after 5 seconds.
 - Never swap materials on a ModelComponent to change pages. The SDK releases the material taken off, and reusing it crashes. Each page has its own screen disc.
 
 ## Known gaps
@@ -40,7 +41,6 @@ A PICO Spatial app that puts the Gemtronic smart ring on the wearer's real hand.
 - Follow and tilt are verified on the emulator only. The blue skeleton there is an emulator overlay; turn off Skeleton display to see the ring.
 - Needs a real headset to judge fit, size and comfort. The ring is shown at 3x because the emulator holds the hand about 0.75 m away; a headset holds it closer, so this scale may be too large there.
 - Emulator hand tracking runs near 30 samples a second, jumps, and reads roll poorly. In a recording, 25° tips almost never registered, and 20° misfired while the hand was still. So tips are unreliable on the emulator. Keep 25° and 10° and judge them on a headset. `TRACKING_JUMP_M_S` drops the jumps.
-- The emulator renders at 2 to 3 frames a second with or without this app, and can show an "isn't responding" dialog while the app's main thread is idle (waiting on a focus event). Choose Wait. This has not been checked on a headset.
 - Gestures read the worn finger, as the real ring's sensor does. Do not switch them to the palm.
 
 ## Build and run

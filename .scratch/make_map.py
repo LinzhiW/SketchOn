@@ -20,7 +20,7 @@ assets = {a["id"]: {k: a[k] for k in ("kind", "src", "alt") if k in a} for a in 
 
 mappings = [
     {"file": SRC + "ui/ringwear/components/RingOnHand.kt", "symbols": ["RingOnHand", "wearOnFinger", "RaisedHand"],
-     "evidence": ["HandTrackingProvider", "GUIDE_PANEL_POSITION", "fingerSegment"],
+     "evidence": ["HandTrackingProvider", "RING_PANEL_POSITION", "fingerSegment"],
      "design_refs": ["state-model:initial", "surface:stage-scene", "node:stage-root", "node:ring-on-hand"]},
     {"file": SRC + "ui/ringwear/components/RingRig.kt", "symbols": ["RingRig"],
      "evidence": ["DISPLAY_SCALE", "asset://ring.glb", "SCREEN_DIAMETER_MM"],
@@ -31,7 +31,7 @@ mappings = [
     {"file": SRC + "ui/ringwear/components/HandPicker.kt", "symbols": ["HandPicker", "HandFinger"],
      "evidence": ["FingerSpots", "spatialHoverEffect", "drawRingMark"],
      "design_refs": ["node:hand-picker"]},
-    {"file": SRC + "ui/ringwear/components/HintPanel.kt", "symbols": ["FingerPanel", "GestureGuide", "ControlPanel", "ArrowButton", "HandHint", "TrackingMessage"],
+    {"file": SRC + "ui/ringwear/components/HintPanel.kt", "symbols": ["RingPanels", "FingerPanel", "GestureGuide", "ControlPanel", "ArrowButton", "HandHint", "TrackingMessage"],
      "evidence": ["control_title", "confirm_button", "back_button", "ic_arrow_left", "ic_arrow_right", "finger_title", "guide_next", "guide_previous", "guide_open", "guide_back", "guide_click", "wear_button", "change_finger", "hand_hint", "tracking_message"],
      "design_refs": ["node:finger-panel", "node:wear-button", "node:gesture-guide", "node:guide-next", "node:guide-previous", "node:guide-open", "node:guide-back", "node:guide-click", "node:change-finger-button", "node:hand-hint", "node:tracking-message", "node:control-panel", "node:control-arrows", "node:previous-button", "node:next-button", "node:confirm-button", "node:back-button", "asset:icon-arrow-left", "asset:icon-arrow-right"]},
     {"file": SRC + "ui/ringwear/RingWearViewModel.kt", "symbols": ["RingWearViewModel"],
