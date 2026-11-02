@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "phase": "designer_gate",
+  "input_mode": "intent_only",
+  "visual_asset_present": false,
+  "gate_required": true,
+  "status": "designer_passed",
+  "pre_gates": {
+    "designDocComplete": true,
+    "designSpecValid": true,
+    "previewMatchesSpec": true,
+    "postBuildVerdict": "pass"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "phase": "6_scaffold_handoff",
+  "producer_skill": "spatial-app-onboarding",
+  "consumer_skill": "spatial-design-to-app",
+  "scaffold_only": true,
+  "product_ui_implemented": false,
+  "template": "stage",
+  "package": "com.example.gemtronicring.p4e7a91c3",
+  "package_source": "generated_default",
+  "entry_points": [
+    "app/src/main/java/com/example/gemtronicring/p4e7a91c3/Main.kt",
+    "app/src/main/AndroidManifest.xml"
+  ],
+  "build_passed": true,
+  "launch_checked": false,
+  "launch_check_note": "Scaffold built with assembleDebug; the emulator was not installed yet, so launch was checked later in the app workflow.",
+  "resume_required": true,
+  "resume_skill": "spatial-design-to-app"
+}

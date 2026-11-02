@@ -1,0 +1,311 @@
+{
+  "schema_version": 1,
+  "design_spec": {
+    "path": "design-spec.json",
+    "sha256": "bb73143363acf6aaa2b82e5944174f730cb08e7285ec61d1bcd4fadc66ad1bd9"
+  },
+  "source_mappings": [
+    {
+      "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/ui/ringwear/components/RingOnHand.kt",
+      "symbols": [
+        "RingOnHand",
+        "wearOnFinger"
+      ],
+      "evidence": [
+        "HandTrackingProvider",
+        "attachments.entity(HINT_PANEL_ID)",
+        "RING_PROXIMAL"
+      ],
+      "design_refs": [
+        "state-model:initial",
+        "surface:stage-scene",
+        "node:stage-root",
+        "node:ring-on-hand"
+      ]
+    },
+    {
+      "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/ui/ringwear/components/RingRig.kt",
+      "symbols": [
+        "RingRig"
+      ],
+      "evidence": [
+        "DISPLAY_SCALE",
+        "asset://ring.glb",
+        "SCREEN_DIAMETER_MM"
+      ],
+      "design_refs": [
+        "asset:ring-model"
+      ]
+    },
+    {
+      "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/ui/ringwear/components/HintPanel.kt",
+      "symbols": [
+        "HandHint",
+        "TrackingMessage"
+      ],
+      "evidence": [
+        "hand_hint",
+        "tracking_message",
+        "GemtronicColors.ringScreenBase"
+      ],
+      "design_refs": [
+        "node:hand-hint",
+        "node:tracking-message"
+      ]
+    },
+    {
+      "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/ui/ringwear/RingWearViewModel.kt",
+      "symbols": [
+        "RingWearViewModel"
+      ],
+      "evidence": [
+        "RingPhase.RingWorn",
+        "RingPhase.HandSearching",
+        "RingPhase.TrackingUnavailable",
+        "movedPage"
+      ],
+      "design_refs": [
+        "state:hand-searching",
+        "state:ring-worn",
+        "state:tracking-unavailable",
+        "transition:hand-found",
+        "transition:hand-lost",
+        "transition:tracking-denied",
+        "action:show-next-page",
+        "action:show-previous-page",
+        "action:enter-ring-worn",
+        "action:leave-ring-worn",
+        "action:enter-tracking-unavailable"
+      ]
+    },
+    {
+      "file": "app/src/main/java/com/example/gemtronicring/p4e7a91c3/data/repository/RingPageRepository.kt",
+      "symbols": [
+        "BundledRingPageRepository"
+      ],
+      "evidence": [
+        "pages/page_gem.png",
+        "pages/page_clock.png",
+        "pages/page_pet.png"
+      ],
+      "design_refs": [
+        "asset:page-gem",
+        "asset:page-clock",
+        "asset:page-pet",
+        "data-case:normal",
+        "data-case:fallback",
+        "data-case:error"
+      ]
+    }
+  ],
+  "implementation": {
+    "initialStateId": "hand-searching",
+    "surfaces": {
+      "stage-scene": {
+        "type": "stage_mixed",
+        "defaultSize": {
+          "width": 1.2,
+          "height": 1.2,
+          "depth": 1.2,
+          "unit": "m"
+        },
+        "minSize": {
+          "width": 1.2,
+          "height": 1.2,
+          "depth": 1.2,
+          "unit": "m"
+        },
+        "maxSize": {
+          "width": 1.2,
+          "height": 1.2,
+          "depth": 1.2,
+          "unit": "m"
+        },
+        "rootNodeId": "stage-root",
+        "placement": {
+          "anchor": "user hand",
+          "hintPanelDistanceM": 0.8,
+          "hintPanelHeightOffsetM": -0.1
+        }
+      }
+    },
+    "nodes": {
+      "stage-root": {
+        "kind": "layout",
+        "layout": {
+          "mode": "overlay",
+          "align": "center",
+          "justify": "center"
+        },
+        "children": [
+          "ring-on-hand",
+          "hand-hint",
+          "tracking-message"
+        ]
+      },
+      "ring-on-hand": {
+        "kind": "domain_visual",
+        "rendererKey": "ring-on-hand",
+        "assetId": "ring-model",
+        "props": {
+          "joint": "ring finger, first segment above the palm",
+          "fallbackJointWhenLost": "keep last pose for 0.3 s, then hide",
+          "displayScale": 1.5,
+          "tiltTriggerDeg": 25,
+          "tiltResetDeg": 10
+        },
+        "bindings": {
+          "pages": "data.pages",
+          "activePageIndex": "state.activePageIndex"
+        },
+        "events": {
+          "handFound": "enter-ring-worn",
+          "handLost": "leave-ring-worn",
+          "trackingDenied": "enter-tracking-unavailable",
+          "tiltForward": "show-next-page",
+          "tiltBack": "show-previous-page"
+        },
+        "visibleInStates": [
+          "ring-worn"
+        ],
+        "accessibilityLabel": "Gemtronic ring"
+      },
+      "hand-hint": {
+        "kind": "spatialui",
+        "component": "sui-text",
+        "content": "Raise your hand to put on the ring",
+        "props": {
+          "variant": "titleLarge"
+        },
+        "layout": {
+          "mode": "stack",
+          "paddingDp": 24
+        },
+        "appearance": {
+          "fill": "ringScreenBase",
+          "radiusDp": 24,
+          "foreground": "labelPrimaryLight"
+        },
+        "visibleInStates": [
+          "hand-searching"
+        ]
+      },
+      "tracking-message": {
+        "kind": "spatialui",
+        "component": "sui-text",
+        "content": "Hand tracking is unavailable. Allow it in system settings, then reopen the app.",
+        "props": {
+          "variant": "bodyLarge"
+        },
+        "layout": {
+          "mode": "stack",
+          "paddingDp": 24,
+          "maxWidthDp": 480
+        },
+        "appearance": {
+          "fill": "ringScreenBase",
+          "radiusDp": 24,
+          "foreground": "labelPrimaryLight"
+        },
+        "visibleInStates": [
+          "tracking-unavailable"
+        ]
+      }
+    },
+    "states": {
+      "hand-searching": {
+        "surfaceRoots": {
+          "stage-scene": "stage-root"
+        }
+      },
+      "ring-worn": {
+        "surfaceRoots": {
+          "stage-scene": "stage-root"
+        }
+      },
+      "tracking-unavailable": {
+        "surfaceRoots": {
+          "stage-scene": "stage-root"
+        }
+      }
+    },
+    "transitions": {
+      "hand-found": {
+        "from": "hand-searching",
+        "to": "ring-worn",
+        "trigger": {
+          "nodeId": "ring-on-hand",
+          "event": "handFound"
+        }
+      },
+      "hand-lost": {
+        "from": "ring-worn",
+        "to": "hand-searching",
+        "trigger": {
+          "nodeId": "ring-on-hand",
+          "event": "handLost"
+        }
+      },
+      "tracking-denied": {
+        "from": "hand-searching",
+        "to": "tracking-unavailable",
+        "trigger": {
+          "nodeId": "ring-on-hand",
+          "event": "trackingDenied"
+        }
+      }
+    },
+    "actions": {
+      "show-next-page": {
+        "type": "increment",
+        "binding": "state.activePageIndex",
+        "value": 1
+      },
+      "show-previous-page": {
+        "type": "increment",
+        "binding": "state.activePageIndex",
+        "value": -1
+      },
+      "enter-ring-worn": {
+        "type": "transition",
+        "transitionId": "hand-found"
+      },
+      "leave-ring-worn": {
+        "type": "transition",
+        "transitionId": "hand-lost"
+      },
+      "enter-tracking-unavailable": {
+        "type": "transition",
+        "transitionId": "tracking-denied"
+      }
+    },
+    "responsiveRules": {},
+    "dataCases": [
+      "error",
+      "fallback",
+      "normal"
+    ],
+    "assets": {
+      "ring-model": {
+        "kind": "model",
+        "src": "ring.glb",
+        "alt": "Gemtronic ring"
+      },
+      "page-gem": {
+        "kind": "image",
+        "src": "page_gem.png",
+        "alt": "Dragon gem"
+      },
+      "page-clock": {
+        "kind": "image",
+        "src": "page_clock.png",
+        "alt": "Clock"
+      },
+      "page-pet": {
+        "kind": "image",
+        "src": "page_pet.png",
+        "alt": "Pet"
+      }
+    }
+  }
+}
