@@ -28,7 +28,7 @@ A PICO Spatial app that puts the Gemtronic smart ring on the wearer's real hand.
 - `ring.glb` units are millimetres. The ring hole runs along model Z, centre about (-0.21, -8.02), inner radius about 8 mm.
 - Joint axes were measured on the emulator: -Z runs along the finger toward the tip, +Y faces the back of the hand. The ring model is turned half a turn so the charging port sits at the bottom.
 - Load textures off the main thread. Each takes about a second on the main thread, and 25 of them froze the app until the system reported it as not responding.
-- Keep all 2D UI in one AttachmentPanel. With several panels, moving focus between them left their windows unresponsive (`dumpsys input` showed FocusEvent stuck in WaitQueue), and the system reported the app as not responding after 5 seconds.
+- `dumpsys input` includes a snapshot of the last ANR, which looks like live state. Check its timestamps and `/data/anr` before trusting it. An unanswered ANR dialog also stays around and reappears when the app is relaunched.
 - Never swap materials on a ModelComponent to change pages. The SDK releases the material taken off, and reusing it crashes. Each page has its own screen disc.
 
 ## Known gaps

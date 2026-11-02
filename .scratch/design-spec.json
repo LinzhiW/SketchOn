@@ -3,7 +3,7 @@
   "metadata": {
     "projectName": "Gemtronic Ring",
     "sourceMode": "intent_only",
-    "revision": 10
+    "revision": 11
   },
   "experience": {
     "subject": "wearing a jewelry-grade smart ring whose round screen is the gem",
@@ -140,12 +140,23 @@
       "rootNodeId": "stage-root",
       "placement": {
         "anchor": "user hand",
-        "panelM": [
+        "centerPanelM": [
           0,
+          1.5,
+          -0.8
+        ],
+        "guidePanelM": [
+          0.34,
           1.5,
           -0.85
         ],
-        "ringGapDp": 420
+        "guidePanelYawRad": -0.38,
+        "controlPanelM": [
+          -0.34,
+          1.5,
+          -0.85
+        ],
+        "controlPanelYawRad": 0.38
       }
     }
   ],
