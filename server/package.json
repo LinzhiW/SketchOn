@@ -1,0 +1,19 @@
+{
+  "name": "gemtronic-render-server",
+  "description": "Turns ring sketches into renders through fal, so the fal key stays off the headset",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node --env-file-if-exists=.env.local src/index.js"
+  },
+  "private": "true",
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "dependencies": {
+    "@fal-ai/client": "^1.10.1"
+  }
+}

@@ -43,3 +43,7 @@ google-services.json
 .scratch/final_docs.py
 .scratch/update_spec_*.py
 .scratch/replay.py
+
+# Render server: secrets and dependencies
+server/.env*
+server/node_modules/
