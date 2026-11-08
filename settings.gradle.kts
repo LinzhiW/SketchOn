@@ -27,6 +27,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "GemtronicRing"
+rootProject.name = "SketchOn"
 
 include(":app")

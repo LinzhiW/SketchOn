@@ -1,5 +1,5 @@
 {
-  "name": "gemtronic-render-server",
+  "name": "sketchon-render-server",
   "description": "Turns ring sketches into renders through fal, so the fal key stays off the headset",
   "directories": {
     "test": "test"

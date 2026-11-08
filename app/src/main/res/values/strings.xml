@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Gemtronic Ring</string>
+    <string name="app_name">SketchOn</string>
     <string name="hello">Hello, Spatial SDK！</string>
     <string name="hand_hint">Raise your hand to put on the ring</string>
     <string name="tracking_message">Hand tracking is unavailable. Allow it in system settings, then reopen the app.</string>

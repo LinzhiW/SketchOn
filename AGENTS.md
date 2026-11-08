@@ -1,8 +1,10 @@
-# Gemtronic Ring on PICO
+# SketchOn
 
 ## What this project does
 
-A PICO Spatial app that puts the Gemtronic smart ring on the wearer's real hand. The user taps a finger on a hand shape, and the ring sits on that finger of whichever hand is raised. The ring runs the real menu with the same four gestures as the real ring. A left panel gives the same four inputs as buttons, because gestures can be missed.
+SketchOn lets people sketch jewelry or other small wearable things in VR, see an AI render while they draw, turn it into a 3D model, and try it on. The folder was called GemtronicRing until 2026-11-07; the Android package id still says `gemtronicring`.
+
+The first piece is the Gemtronic smart ring, which already works: a PICO Spatial app that puts the ring on the wearer's real hand. The user taps a finger on a hand shape, and the ring sits on that finger of whichever hand is raised. The ring runs the real menu with the same four gestures as the real ring. A left panel gives the same four inputs as buttons, because gestures can be missed.
 
 ## Why this structure
 
@@ -42,6 +44,15 @@ A PICO Spatial app that puts the Gemtronic smart ring on the wearer's real hand.
 - Needs a real headset to judge fit, size and comfort. The ring is shown at 3x because the emulator holds the hand about 0.75 m away; a headset holds it closer, so this scale may be too large there.
 - Emulator hand tracking runs near 30 samples a second, jumps, and reads roll poorly. In a recording, 25° tips almost never registered, and 20° misfired while the hand was still. So tips are unreliable on the emulator. Keep 25° and 10° and judge them on a headset. `TRACKING_JUMP_M_S` drops the jumps.
 - Gestures read the worn finger, as the real ring's sensor does. Do not switch them to the palm.
+
+## Render server (`server/`)
+
+A Node server that keeps the fal key off the headset. `POST /api/render` turns a sketch into a render; `GET /` is a sketch test page. FLUX.2 Klein 4B renders live while drawing (about 0.8 s); Nano Banana 2 makes one faithful render on request (about 11 s, $0.08). The key lives in `server/.env.local`, which git ignores. Never print it.
+
+```bash
+npm --prefix server start
+npm --prefix server test
+```
 
 ## Build and run
 
