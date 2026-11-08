@@ -18,11 +18,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 
 /** The ring model plus one screen disc per firmware frame, under one [root] entity. */
-internal class RingRig(val root: Entity, private val screens: Map<String, Entity>) {
+internal class RingRig(override val root: Entity, private val screens: Map<String, Entity>) :
+    WornRing {
     private var shownFrame: String? = null
 
     // One disc per frame: swapping a ModelComponent's material releases the one taken off.
-    fun showFrame(frame: String?) {
+    override fun showFrame(frame: String?) {
         if (frame == shownFrame) return
         shownFrame = frame
         screens.forEach { (name, screen) -> screen.enabled = name == frame }

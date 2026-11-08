@@ -42,6 +42,9 @@ private val PanelPadding = 24.dp
 @Composable
 internal fun CenterPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit) {
     when (state.phase) {
+        RingPhase.Home -> HomePanel(onEvent)
+        RingPhase.Sketching -> SketchPanel(state.sketch, onEvent)
+        RingPhase.Making3D -> Making3dPanel(state.sketch, onEvent)
         RingPhase.FingerChoosing -> FingerPanel(state, onEvent)
         RingPhase.HandSearching -> HandHint()
         RingPhase.TrackingUnavailable -> TrackingMessage()

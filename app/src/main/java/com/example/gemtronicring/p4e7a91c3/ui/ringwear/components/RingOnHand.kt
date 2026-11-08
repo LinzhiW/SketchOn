@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingSample
 import com.example.gemtronicring.p4e7a91c3.domain.model.WornFinger
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
@@ -30,7 +31,7 @@ import com.pico.spatial.tracking.hand.HandTrackingProvider
 import com.pico.spatial.ui.foundation.content.SpatialView
 import kotlinx.coroutines.delay
 
-private const val TAG = "GemtronicRing"
+private const val TAG = "SketchOn"
 private const val CENTER_PANEL_ID = "center-panel"
 private const val GUIDE_PANEL_ID = "gesture-guide"
 private const val CONTROL_PANEL_ID = "control-panel"
@@ -112,23 +113,33 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         }
     }
 
-    var rig by remember { mutableStateOf<RingRig?>(null) }
+    var rig by remember { mutableStateOf<WornRing?>(null) }
     val stageRoot = remember { Entity() }
-    LaunchedEffect(state.frames) {
-        if (state.frames.isEmpty() || rig != null) return@LaunchedEffect
-        runCatching { RingRig.create(state.frames) }
-            .onSuccess {
-                stageRoot.addChild(it.root)
-                rig = it
+    // Load whichever ring is chosen, replacing the one before.
+    LaunchedEffect(state.piece, state.frames) {
+        rig?.destroy()
+        rig = null
+        val piece = state.piece
+        runCatching {
+                when (piece) {
+                    RingPiece.Gemtronic ->
+                        if (state.frames.isEmpty()) null
+                        else RingRig.create(state.frames).also { stageRoot.addChild(it.root) }
+                    is RingPiece.Generated -> GeneratedRingRig.create(piece.path, stageRoot)
+                }
             }
+            .onSuccess { rig = it }
             .onFailure { Log.e(TAG, "Could not load the ring", it) }
     }
+    val isGemtronic = state.piece == RingPiece.Gemtronic
 
     SpatialView(
         modifier = Modifier.fillMaxSize(),
         attachments = {
             AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, onEvent) }
-            AttachmentPanel(GUIDE_PANEL_ID) { GestureGuide(state.activeFrame, onEvent) }
+            AttachmentPanel(GUIDE_PANEL_ID) {
+                if (isGemtronic) GestureGuide(state.activeFrame, onEvent) else GeneratedGuide(onEvent)
+            }
             AttachmentPanel(CONTROL_PANEL_ID) { ControlPanel(onEvent) }
         },
         update = { _, attachments ->
@@ -136,7 +147,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             val ringInUse =
                 state.phase == RingPhase.HandSearching || state.phase == RingPhase.RingWorn
             attachments.entity(GUIDE_PANEL_ID)?.enabled = ringInUse
-            attachments.entity(CONTROL_PANEL_ID)?.enabled = ringInUse
+            attachments.entity(CONTROL_PANEL_ID)?.enabled = ringInUse && isGemtronic
             rig?.let { ring ->
                 ring.showFrame(state.activeFrame)
                 ring.root.enabled = state.phase == RingPhase.RingWorn

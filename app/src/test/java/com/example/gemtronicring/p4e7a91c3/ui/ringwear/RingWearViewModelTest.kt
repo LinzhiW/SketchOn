@@ -1,24 +1,74 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 
+import com.example.gemtronicring.p4e7a91c3.data.remote.JobStatus
+import com.example.gemtronicring.p4e7a91c3.data.remote.SketchOnServer
 import com.example.gemtronicring.p4e7a91c3.data.repository.BundledRingMenuRepository
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingSample
 import com.example.gemtronicring.p4e7a91c3.domain.model.WornFinger
 import com.example.gemtronicring.p4e7a91c3.domain.usecase.NavigateMenuUseCase
 import com.example.gemtronicring.p4e7a91c3.domain.usecase.RingGestureUseCase
+import java.io.File
 import kotlin.math.sin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 
+/** Answers instantly and records what it was asked. */
+private class FakeServer : SketchOnServer {
+    val renders = mutableListOf<String>()
+    var jobPolls = 0
+
+    override suspend fun render(sketchDataUri: String, style: String, seed: Int): String {
+        renders += "$sketchDataUri/$style"
+        return "data:image/jpeg;base64,render-of-$sketchDataUri"
+    }
+
+    override suspend fun start3d(imageDataUri: String) = "job-1"
+
+    override suspend fun job(jobId: String): JobStatus =
+        if (++jobPolls < 2) JobStatus.Running else JobStatus.Done("/models/job-1.glb")
+
+    override suspend fun download(modelUrl: String, target: File) = target.writeText("glb")
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
 class RingWearViewModelTest {
-    private val viewModel =
-        RingWearViewModel(
-            BundledRingMenuRepository().menu(),
-            RingGestureUseCase(),
-            NavigateMenuUseCase(),
-        )
+    @get:Rule val folder = TemporaryFolder()
+    private val dispatcher = StandardTestDispatcher()
+    private val server = FakeServer()
+    private lateinit var viewModel: RingWearViewModel
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+        viewModel =
+            RingWearViewModel(
+                BundledRingMenuRepository().menu(),
+                RingGestureUseCase(),
+                NavigateMenuUseCase(),
+                server,
+                folder.root,
+                pollIntervalMs = 10,
+            )
+    }
+
+    @After
+    fun tearDown() = Dispatchers.resetMain()
     private var timeMs = 1000L
 
     private fun hand(tipDeg: Float, ms: Long) {
@@ -30,14 +80,15 @@ class RingWearViewModelTest {
     }
 
     private fun wearRing() {
+        viewModel.onEvent(RingWearEvent.ChooseGemtronic)
         viewModel.onEvent(RingWearEvent.ConfirmFinger)
         hand(0f, 100)
     }
 
     @Test
-    fun `starts on the finger choice with the home frame ready`() {
+    fun `starts at home with the Gemtronic ring's home frame ready`() {
         val state = viewModel.state.value
-        assertEquals(RingPhase.FingerChoosing, state.phase)
+        assertEquals(RingPhase.Home, state.phase)
         assertEquals(WornFinger.Index, state.finger)
         assertEquals("idle", state.activeFrame)
         assertTrue(state.frames.size == 25)
@@ -46,7 +97,44 @@ class RingWearViewModelTest {
     @Test
     fun `a hand is ignored until the finger is chosen`() {
         hand(0f, 100)
+        assertEquals(RingPhase.Home, viewModel.state.value.phase)
+        viewModel.onEvent(RingWearEvent.ChooseGemtronic)
+        hand(0f, 100)
         assertEquals(RingPhase.FingerChoosing, viewModel.state.value.phase)
+    }
+
+    @Test
+    fun `a drawing is rendered, and only the newest drawing waits while one renders`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.StartSketch)
+        viewModel.onEvent(RingWearEvent.SketchChanged("a"))
+        viewModel.onEvent(RingWearEvent.SketchChanged("b"))
+        viewModel.onEvent(RingWearEvent.SketchChanged("c"))
+        advanceUntilIdle()
+        assertEquals(listOf("a/gold", "c/gold"), server.renders)
+        assertEquals("data:image/jpeg;base64,render-of-c", viewModel.state.value.sketch.render)
+    }
+
+    @Test
+    fun `clearing the drawing clears the render`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.StartSketch)
+        viewModel.onEvent(RingWearEvent.SketchChanged("a"))
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.SketchChanged(null))
+        assertNull(viewModel.state.value.sketch.render)
+    }
+
+    @Test
+    fun `making 3D downloads the model and goes to the finger choice`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.StartSketch)
+        viewModel.onEvent(RingWearEvent.SketchChanged("a"))
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.Make3d)
+        assertEquals(RingPhase.Making3D, viewModel.state.value.phase)
+        advanceUntilIdle()
+        val state = viewModel.state.value
+        assertEquals(RingPhase.FingerChoosing, state.phase)
+        val piece = state.piece as RingPiece.Generated
+        assertTrue(File(piece.path).exists())
     }
 
     @Test
@@ -100,6 +188,7 @@ class RingWearViewModelTest {
 
     @Test
     fun `the buttons work while no hand is seen`() {
+        viewModel.onEvent(RingWearEvent.ChooseGemtronic)
         viewModel.onEvent(RingWearEvent.ConfirmFinger)
         viewModel.onEvent(RingWearEvent.MenuInput(RingGesture.Next))
         assertEquals("home-pet", viewModel.state.value.activeFrame)

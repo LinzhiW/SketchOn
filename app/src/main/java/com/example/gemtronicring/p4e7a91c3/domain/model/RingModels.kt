@@ -1,6 +1,12 @@
 package com.example.gemtronicring.p4e7a91c3.domain.model
 
 enum class RingPhase {
+    /** Choose what to try on: draw a ring, or the Gemtronic ring. */
+    Home,
+    /** Drawing, with a live AI render beside the drawing. */
+    Sketching,
+    /** Waiting while the chosen render becomes a 3D model. */
+    Making3D,
     FingerChoosing,
     HandSearching,
     RingWorn,

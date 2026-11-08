@@ -1,18 +1,48 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 
+import com.example.gemtronicring.p4e7a91c3.domain.model.RenderStyle
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingSample
 import com.example.gemtronicring.p4e7a91c3.domain.model.WornFinger
 
 data class RingWearUiState(
-    val phase: RingPhase = RingPhase.FingerChoosing,
+    val phase: RingPhase = RingPhase.Home,
+    val piece: RingPiece = RingPiece.Gemtronic,
     val finger: WornFinger = WornFinger.Index,
     val frames: List<String> = emptyList(),
     val activeFrame: String? = null,
+    val sketch: SketchUiState = SketchUiState(),
+)
+
+data class SketchUiState(
+    val style: RenderStyle = RenderStyle.Gold,
+    /** The latest render, as a data URI. */
+    val render: String? = null,
+    val rendering: Boolean = false,
+    val lastRenderMs: Long? = null,
+    val error: String? = null,
+    /** Seconds since the 3D conversion started. */
+    val making3dSeconds: Int = 0,
 )
 
 sealed interface RingWearEvent {
+    data object StartSketch : RingWearEvent
+
+    data object ChooseGemtronic : RingWearEvent
+
+    data object GoHome : RingWearEvent
+
+    /** The drawing changed. [sketchDataUri] is a PNG data URI; null when the drawing is empty. */
+    data class SketchChanged(val sketchDataUri: String?) : RingWearEvent
+
+    data class ChooseStyle(val style: RenderStyle) : RingWearEvent
+
+    data object Make3d : RingWearEvent
+
+    data object Cancel3d : RingWearEvent
+
     data class SelectFinger(val finger: WornFinger) : RingWearEvent
 
     data object ConfirmFinger : RingWearEvent
