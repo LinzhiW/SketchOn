@@ -34,9 +34,9 @@ import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 
-private val WheelSize = 150.dp
-private val BarWidth = 150.dp
-private val BarHeight = 28.dp
+private val WheelSize = 118.dp
+private val BarWidth = 140.dp
+private val BarHeight = 24.dp
 private val PreviewSize = 56.dp
 
 /**

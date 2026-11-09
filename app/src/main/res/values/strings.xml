@@ -58,6 +58,7 @@
     <string name="sketch_smooth">Smooth</string>
     <string name="sketch_shapes">Snap shapes</string>
     <string name="material_clay">Clay</string>
+    <string name="material_metal">Metal</string>
     <string name="material_resin">Resin</string>
     <string name="material_gold">Gold</string>
     <string name="material_silver">Silver</string>

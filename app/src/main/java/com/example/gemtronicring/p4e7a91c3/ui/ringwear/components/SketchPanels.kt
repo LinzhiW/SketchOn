@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -66,7 +67,8 @@ private val PanelShape = RoundedCornerShape(24.dp)
 private val SquareShape = RoundedCornerShape(16.dp)
 private val SquareSize = 360.dp
 private val CardSize = 150.dp
-private val ViewPictureSize = 96.dp
+private val ViewPictureSize = 72.dp
+private val ColourHeight = 160.dp
 private val Gap = 16.dp
 private val SmallGap = 8.dp
 private val Pad = 24.dp
@@ -210,97 +212,140 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
         send()
     }
 
-    Column(
-        verticalArrangement = Arrangement.spacedBy(Gap),
+    // Two columns: the panel grows to fit its content in width, but is cut off past a height
+    // of about 700 dp, so the choices sit beside the drawing rather than below it.
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Pad),
         modifier = Modifier.background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
-        Title(stringResource(R.string.sketch_title))
-        Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
-            Canvas(
-                modifier =
-                    Modifier.size(SquareSize)
-                        .clip(SquareShape)
-                        .background(Color.White)
-                        .onSizeChanged { canvasPx = it.width }
-                        .pointerInput(Unit) {
-                            detectDragGestures(
-                                onDragStart = {
-                                    current.clear()
-                                    current.add(it)
-                                },
-                                onDrag = { change, _ ->
-                                    current.add(change.position)
-                                    if (System.currentTimeMillis() - lastSent >= SEND_EVERY_MS) send()
-                                },
-                                onDragEnd = { finishStroke() },
-                                onDragCancel = { finishStroke() },
-                            )
-                        }
-            ) {
-                val guide = Stroke(width = GUIDE_WIDTH_PX * size.width / SKETCH_PX, cap = StrokeCap.Round)
-                guideShapes(sketch.view).forEach { line ->
-                    drawPath(smoothPath(line.map { Offset(it.x * size.width, it.y * size.height) }), Color(GUIDE_GREY), style = guide)
-                }
-                val pen = Stroke(width = PEN_WIDTH_PX * size.width / SKETCH_PX, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                (strokes + listOf(current.toList())).forEach { points ->
-                    if (points.isEmpty()) return@forEach
-                    drawPath(smoothPath(points), Color.Black, style = pen)
-                }
-            }
-            RenderView(sketch)
-        }
-        ChoiceRow(R.string.sketch_material, Material.entries, sketch.material, ::materialLabel) {
-            onEvent(RingWearEvent.ChooseMaterial(it))
-        }
-        if (!sketch.material.metal) {
-            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
-                Label(stringResource(R.string.sketch_color))
-                ColorWheel(sketch.color) { onEvent(RingWearEvent.ChooseColor(it)) }
-            }
-        }
-        ChoiceRow(R.string.sketch_style, DesignStyle.entries, sketch.style, ::styleLabel) {
-            onEvent(RingWearEvent.ChooseStyle(it))
-        }
-        ViewPicker(sketch.view) { onEvent(RingWearEvent.ChooseView(it)) }
-        Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
-            Label(stringResource(R.string.sketch_help))
-            Toggle(R.string.sketch_smooth, sketch.smooth) { onEvent(RingWearEvent.ToggleSmooth) }
-            Toggle(R.string.sketch_shapes, sketch.shapes) { onEvent(RingWearEvent.ToggleShapes) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = darkButtonColors()) {
-                Text(stringResource(R.string.back_button))
-            }
-            Button(
-                onClick = {
-                    if (strokes.isNotEmpty()) {
-                        strokes.removeAt(strokes.lastIndex)
-                        send()
+        Column(verticalArrangement = Arrangement.spacedBy(Gap)) {
+            Title(stringResource(R.string.sketch_title))
+            Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
+                Canvas(
+                    modifier =
+                        Modifier.size(SquareSize)
+                            .clip(SquareShape)
+                            .background(Color.White)
+                            .onSizeChanged { canvasPx = it.width }
+                            .pointerInput(Unit) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        current.clear()
+                                        current.add(it)
+                                    },
+                                    onDrag = { change, _ ->
+                                        current.add(change.position)
+                                        if (System.currentTimeMillis() - lastSent >= SEND_EVERY_MS) send()
+                                    },
+                                    onDragEnd = { finishStroke() },
+                                    onDragCancel = { finishStroke() },
+                                )
+                            }
+                ) {
+                    val guide = Stroke(width = GUIDE_WIDTH_PX * size.width / SKETCH_PX, cap = StrokeCap.Round)
+                    guideShapes(sketch.view).forEach { line ->
+                        drawPath(smoothPath(line.map { Offset(it.x * size.width, it.y * size.height) }), Color(GUIDE_GREY), style = guide)
                     }
-                },
-                colors = darkButtonColors(),
-            ) {
-                Text(stringResource(R.string.sketch_undo))
+                    val pen = Stroke(width = PEN_WIDTH_PX * size.width / SKETCH_PX, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    (strokes + listOf(current.toList())).forEach { points ->
+                        if (points.isEmpty()) return@forEach
+                        drawPath(smoothPath(points), Color.Black, style = pen)
+                    }
+                }
+                RenderView(sketch)
             }
-            Button(
-                onClick = {
-                    strokes.clear()
-                    current.clear()
-                    send()
-                },
-                colors = darkButtonColors(),
-            ) {
-                Text(stringResource(R.string.sketch_clear))
+            Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = darkButtonColors()) {
+                    Text(stringResource(R.string.back_button))
+                }
+                Button(
+                    onClick = {
+                        if (strokes.isNotEmpty()) {
+                            strokes.removeAt(strokes.lastIndex)
+                            send()
+                        }
+                    },
+                    colors = darkButtonColors(),
+                ) {
+                    Text(stringResource(R.string.sketch_undo))
+                }
+                Button(
+                    onClick = {
+                        strokes.clear()
+                        current.clear()
+                        send()
+                    },
+                    colors = darkButtonColors(),
+                ) {
+                    Text(stringResource(R.string.sketch_clear))
+                }
+                Button(
+                    onClick = { onEvent(RingWearEvent.Make3d) },
+                    enabled = sketch.render != null && !sketch.rendering,
+                    colors = lightButtonColors(),
+                ) {
+                    Text(stringResource(R.string.sketch_make_3d))
+                }
             }
-            Button(
-                onClick = { onEvent(RingWearEvent.Make3d) },
-                enabled = sketch.render != null && !sketch.rendering,
-                colors = lightButtonColors(),
+            Body(statusText(sketch))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(Gap)) {
+            // Material is clay, resin or metal. The metals (gold, silver, rose gold, platinum)
+            // are metal's colours, so they sit where clay and resin show the colour wheel.
+            var lastMetal by remember { mutableStateOf(Material.Gold) }
+            if (sketch.material.metal) lastMetal = sketch.material
+            val group = when (sketch.material) {
+                Material.Clay -> Material.Clay
+                Material.Resin -> Material.Resin
+                else -> null
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+                Label(stringResource(R.string.sketch_material))
+                listOf(Material.Clay to R.string.material_clay, Material.Resin to R.string.material_resin).forEach { (m, label) ->
+                    Button(
+                        onClick = { onEvent(RingWearEvent.ChooseMaterial(m)) },
+                        colors = if (group == m) lightButtonColors() else darkButtonColors(),
+                    ) {
+                        Text(stringResource(label))
+                    }
+                }
+                Button(
+                    onClick = { if (!sketch.material.metal) onEvent(RingWearEvent.ChooseMaterial(lastMetal)) },
+                    colors = if (group == null) lightButtonColors() else darkButtonColors(),
+                ) {
+                    Text(stringResource(R.string.material_metal))
+                }
+            }
+            // A fixed height, so the choices below do not move when the material changes.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(SmallGap),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.height(ColourHeight),
             ) {
-                Text(stringResource(R.string.sketch_make_3d))
+                Label(stringResource(R.string.sketch_color))
+                if (sketch.material.metal) {
+                    Material.entries.filter { it.metal }.forEach { metal ->
+                        Button(
+                            onClick = { onEvent(RingWearEvent.ChooseMaterial(metal)) },
+                            colors = if (metal == sketch.material) lightButtonColors() else darkButtonColors(),
+                        ) {
+                            Text(stringResource(materialLabel(metal)))
+                        }
+                    }
+                } else {
+                    ColorWheel(sketch.color) { onEvent(RingWearEvent.ChooseColor(it)) }
+                }
+            }
+            ChoiceRow(R.string.sketch_style, DesignStyle.entries, sketch.style, ::styleLabel) {
+                onEvent(RingWearEvent.ChooseStyle(it))
+            }
+            ViewPicker(sketch.view) { onEvent(RingWearEvent.ChooseView(it)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+                Label(stringResource(R.string.sketch_help))
+                Toggle(R.string.sketch_smooth, sketch.smooth) { onEvent(RingWearEvent.ToggleSmooth) }
+                Toggle(R.string.sketch_shapes, sketch.shapes) { onEvent(RingWearEvent.ToggleShapes) }
             }
         }
-        Body(statusText(sketch))
     }
 }
 
