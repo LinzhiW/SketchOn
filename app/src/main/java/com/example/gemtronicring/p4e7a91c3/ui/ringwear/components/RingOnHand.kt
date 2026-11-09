@@ -128,13 +128,28 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                     is RingPiece.Generated -> GeneratedRingRig.create(piece.path, stageRoot)
                 }
             }
-            .onSuccess { rig = it }
+            .onSuccess {
+                rig = it
+                if (it != null) currentOnEvent(RingWearEvent.RingLoaded(it.parts()))
+            }
             .onFailure { Log.e(TAG, "Could not load the ring", it) }
     }
     val isGemtronic = state.piece == RingPiece.Gemtronic
-    LaunchedEffect(rig, state.paint) {
-        val paint = state.paint ?: return@LaunchedEffect
-        (rig as? GeneratedRingRig)?.paint(paint)
+    // While painting, nothing moves the ring through the view's update (that runs on hand
+    // data), so it is placed here whenever the ring, the phase or the turn changes.
+    LaunchedEffect(rig, state.phase, state.turnYaw, state.turnPitch) {
+        val ring = rig ?: return@LaunchedEffect
+        if (state.phase == RingPhase.Painting) {
+            ring.root.enabled = true
+            holdForPainting(ring.root, state.turnYaw, state.turnPitch)
+        } else if (state.phase != RingPhase.RingWorn) {
+            ring.root.enabled = false
+            ring.root.components[TransformComponent::class.java]?.setScaleVector(Vector3(1f, 1f, 1f))
+        }
+    }
+    LaunchedEffect(rig, state.paints) {
+        val ring = rig as? GeneratedRingRig ?: return@LaunchedEffect
+        state.paints.forEach { (part, colour) -> ring.paint(part, colour) }
     }
 
     SpatialView(
@@ -143,7 +158,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, onEvent) }
             AttachmentPanel(GUIDE_PANEL_ID) {
                 if (isGemtronic) GestureGuide(state.activeFrame, onEvent)
-                else GeneratedGuide(state.paintable, state.paint, onEvent)
+                else GeneratedGuide(state.paintable, onEvent)
             }
             AttachmentPanel(CONTROL_PANEL_ID) { ControlPanel(onEvent) }
         },
@@ -155,8 +170,13 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             attachments.entity(CONTROL_PANEL_ID)?.enabled = ringInUse && isGemtronic
             rig?.let { ring ->
                 ring.showFrame(state.activeFrame)
-                ring.root.enabled = state.phase == RingPhase.RingWorn
-                if (hand != null) wearOnFinger(ring.root, stageRoot, hand, state.finger)
+                if (state.phase == RingPhase.Painting) {
+                    // Placed by the effect below: nothing here changes while painting.
+                } else {
+                    ring.root.enabled = state.phase == RingPhase.RingWorn
+                    ring.root.components[TransformComponent::class.java]?.setScaleVector(Vector3(1f, 1f, 1f))
+                    if (hand != null) wearOnFinger(ring.root, stageRoot, hand, state.finger)
+                }
             }
         },
     ) { content, attachments ->
@@ -179,6 +199,20 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             }
             stageRoot.addChild(this)
         }
+    }
+}
+
+private val PAINT_POSITION = Vector3(0.36f, 1.45f, -0.95f)
+private const val PAINT_SCALE = 3f
+
+/** Holds the ring still for painting, facing the user (looking through its hole, stone up). */
+private fun holdForPainting(ring: Entity, yawDeg: Float, pitchDeg: Float) {
+    val yaw = Quat(Vector3(0f, 1f, 0f), Math.toRadians(yawDeg.toDouble()).toFloat())
+    val pitch = Quat(Vector3(1f, 0f, 0f), Math.toRadians(pitchDeg.toDouble()).toFloat())
+    ring.components[TransformComponent::class.java]?.apply {
+        setPosition(PAINT_POSITION)
+        setQuaternion(pitch * yaw)
+        setScaleVector(Vector3(PAINT_SCALE, PAINT_SCALE, PAINT_SCALE))
     }
 }
 

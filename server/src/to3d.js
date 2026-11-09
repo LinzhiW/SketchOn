@@ -79,7 +79,7 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
   function posed(raw, jobId) {
     try {
       const { glb, pose } = (pose_ ?? poseRing)(raw);
-      log(`3D job ${jobId}: hole along ${pose.holeAxis}, hole found: ${pose.holeFound}`);
+      log(`3D job ${jobId}: hole along ${pose.holeAxis}, hole found: ${pose.holeFound}, parts: ${pose.parts ?? 1}`);
       return glb;
     } catch (error) {
       log(`3D job ${jobId}: could not pose the ring (${error.message}); keeping Tripo's pose`);

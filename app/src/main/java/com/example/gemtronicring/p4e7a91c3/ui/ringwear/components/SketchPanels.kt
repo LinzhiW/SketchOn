@@ -54,6 +54,8 @@ import com.example.gemtronicring.p4e7a91c3.ui.ringwear.GalleryUiState
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearViewModel
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.SketchUiState
+import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearUiState
+import androidx.compose.foundation.gestures.detectDragGestures
 import com.example.gemtronicring.p4e7a91c3.ui.theme.GemtronicColors
 import com.pico.spatial.ui.design.Button
 import com.pico.spatial.ui.design.ButtonDefaults
@@ -85,6 +87,7 @@ private const val GUIDE_WIDTH_PX = 3f
 private const val GUIDE_GREY = 0xFFC8C8C8.toInt()
 private const val GALLERY_COLUMNS = 3
 private const val NAME_LIMIT = 40
+private const val TURN_PER_PX = 0.5f
 private const val WHITE = 0xFFFFFFFF.toInt()
 
 /** First panel: draw a ring, or browse what has been made. */
@@ -476,6 +479,63 @@ internal fun NamingPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
     }
 }
 
+/**
+ * Colouring a clay or resin ring before wearing it. The ring is held still beside this panel;
+ * the pad turns it, the part buttons choose band or decoration, and the wheel colours it.
+ */
+@Composable
+internal fun PaintingPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit) {
+    val current = state.paints[state.paintPart] ?: WHITE
+    Column(
+        verticalArrangement = Arrangement.spacedBy(Gap),
+        modifier = Modifier.width(440.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
+    ) {
+        Title(stringResource(R.string.painting_title))
+        Body(stringResource(R.string.painting_body))
+        if (state.parts > 1) {
+            Section(R.string.painting_part) {
+                ButtonRow(
+                    listOf(
+                        Triple(R.string.painting_band, state.paintPart == 0) { onEvent(RingWearEvent.ChoosePaintPart(0)) },
+                        Triple(R.string.painting_decoration, state.paintPart == 1) { onEvent(RingWearEvent.ChoosePaintPart(1)) },
+                    )
+                )
+            }
+        }
+        Section(R.string.sketch_color) {
+            ColorWheel(current) { onEvent(RingWearEvent.PaintRing(it)) }
+        }
+        Section(R.string.painting_turn) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier =
+                    Modifier.size(width = 380.dp, height = 96.dp)
+                        .clip(SquareShape)
+                        .background(Dim)
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, amount ->
+                                change.consume()
+                                onEvent(RingWearEvent.TurnRing(amount.x * TURN_PER_PX, amount.y * TURN_PER_PX))
+                            }
+                        },
+            ) {
+                Body(stringResource(R.string.painting_turn_hint))
+            }
+            ButtonRow(
+                listOf(
+                    Triple(R.string.painting_left, false) { onEvent(RingWearEvent.TurnRing(-45f, 0f)) },
+                    Triple(R.string.painting_right, false) { onEvent(RingWearEvent.TurnRing(45f, 0f)) },
+                    Triple(R.string.painting_up, false) { onEvent(RingWearEvent.TurnRing(0f, -30f)) },
+                    Triple(R.string.painting_down, false) { onEvent(RingWearEvent.TurnRing(0f, 30f)) },
+                )
+            )
+        }
+        Button(onClick = { onEvent(RingWearEvent.FinishPainting) }, colors = lightButtonColors()) {
+            Text(stringResource(R.string.wear_button))
+        }
+    }
+}
+
 /** Shown while Tripo builds the model, which takes a minute or two. */
 @Composable
 internal fun Making3dPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit) {
@@ -495,7 +555,7 @@ internal fun Making3dPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Un
 
 /** The right panel when wearing a made ring: it has no screen or gestures. */
 @Composable
-internal fun GeneratedGuide(paintable: Boolean, paint: Int?, onEvent: (RingWearEvent) -> Unit) {
+internal fun GeneratedGuide(paintable: Boolean, onEvent: (RingWearEvent) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         modifier = Modifier.width(320.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
@@ -503,8 +563,9 @@ internal fun GeneratedGuide(paintable: Boolean, paint: Int?, onEvent: (RingWearE
         Title(stringResource(R.string.generated_title))
         Body(stringResource(R.string.generated_body))
         if (paintable) {
-            Label(stringResource(R.string.generated_paint))
-            ColorWheel(paint ?: WHITE) { onEvent(RingWearEvent.PaintRing(it)) }
+            Button(onClick = { onEvent(RingWearEvent.OpenPainting) }, colors = lightButtonColors()) {
+                Text(stringResource(R.string.generated_recolour))
+            }
         }
         Button(onClick = { onEvent(RingWearEvent.ChangeFinger) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.change_finger))

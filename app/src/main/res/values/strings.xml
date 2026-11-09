@@ -71,7 +71,6 @@
     <string name="style_bold">Bold</string>
     <string name="sketch_color">Colour</string>
     <string name="sketch_color_later">Clay and resin are made in white. You can colour the ring after it is made in 3D.</string>
-    <string name="generated_paint">Colour your ring</string>
     <string name="view_ring_shape">Band shape</string>
     <string name="view_from_above">Top &amp; stone</string>
     <string name="view_profile">Side profile</string>
@@ -88,4 +87,16 @@
     <string name="naming_back">Keep drawing</string>
     <string name="naming_progress">Making your ring in 3D while you name it… %1$d s</string>
     <string name="naming_done">Done</string>
+    <string name="generated_recolour">Recolour</string>
+    <string name="painting_title">Colour your ring</string>
+    <string name="painting_body">Turn the ring to see every side, choose a part, then pick its colour.</string>
+    <string name="painting_part">Part</string>
+    <string name="painting_band">Band</string>
+    <string name="painting_decoration">Decoration</string>
+    <string name="painting_turn">Turn the ring</string>
+    <string name="painting_turn_hint">Drag here to turn</string>
+    <string name="painting_left">Left</string>
+    <string name="painting_right">Right</string>
+    <string name="painting_up">Up</string>
+    <string name="painting_down">Down</string>
 </resources>

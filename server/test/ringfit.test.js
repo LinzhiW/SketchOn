@@ -63,3 +63,41 @@ test("the translation, rotation and scale give the same pose as the matrix", () 
     viaTrs.forEach((c, i) => assert.ok(Math.abs(c - viaMatrix[i]) < 1e-6, `${viaTrs} vs ${viaMatrix}`));
   }
 });
+
+test("splits a ring with a stone into band and decoration, each with its own material", async () => {
+  const { splitParts } = await import("../src/parts.js");
+  // A flat ring (hole along Y) with a large stone, as one indexed primitive.
+  const pts = flatRing();
+  for (let x = 1.05; x <= 1.6; x += 0.01) for (let h = -0.1; h <= 0.1; h += 0.02) pts.push([3 + x, -2 + h, 5 + h]);
+  const positions = Buffer.alloc(pts.length * 12);
+  pts.forEach((p, i) => p.forEach((c, k) => positions.writeFloatLE(c, i * 12 + k * 4)));
+  const tris = [];
+  for (let i = 0; i + 2 < pts.length; i += 3) tris.push(i, i + 1, i + 2);
+  const indices = Buffer.alloc(tris.length * 4);
+  tris.forEach((v, i) => indices.writeUInt32LE(v, i * 4));
+  const bin = Buffer.concat([positions, indices]);
+  const json = {
+    nodes: [{ mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1, material: 0 }] }],
+    materials: [{ name: "m" }],
+    buffers: [{ byteLength: bin.length }],
+    bufferViews: [
+      { buffer: 0, byteOffset: 0, byteLength: positions.length },
+      { buffer: 0, byteOffset: positions.length, byteLength: indices.length },
+    ],
+    accessors: [
+      { bufferView: 0, componentType: 5126, count: pts.length, type: "VEC3" },
+      { bufferView: 1, componentType: 5125, count: tris.length, type: "SCALAR" },
+    ],
+  };
+  const { matrix } = ringPose(pts);
+  const { parts, rest } = splitParts({ json, bin, rest: Buffer.alloc(0) }, matrix);
+  assert.equal(parts, 2);
+  assert.equal(json.meshes[0].primitives.length, 2);
+  assert.equal(json.materials.length, 2);
+  const [bandCount, decoCount] = json.meshes[0].primitives.map((p) => json.accessors[p.indices].count);
+  assert.equal(bandCount + decoCount, tris.length);
+  assert.ok(decoCount > 0 && decoCount < bandCount);
+  assert.equal(rest.readUInt32LE(0) % 4, 0);
+  assert.equal(json.buffers[0].byteLength, rest.readUInt32LE(0));
+});

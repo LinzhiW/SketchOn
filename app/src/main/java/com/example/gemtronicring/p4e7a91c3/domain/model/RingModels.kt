@@ -11,6 +11,8 @@ enum class RingPhase {
     Naming,
     /** Waiting while the chosen render becomes a 3D model. */
     Making3D,
+    /** Colouring a clay or resin ring, held still in front of the user, before wearing it. */
+    Painting,
     FingerChoosing,
     HandSearching,
     RingWorn,

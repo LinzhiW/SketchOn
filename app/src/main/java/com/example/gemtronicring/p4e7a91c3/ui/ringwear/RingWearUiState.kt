@@ -20,8 +20,15 @@ data class RingWearUiState(
     val gallery: GalleryUiState = GalleryUiState(),
     /** True when the worn piece is clay or resin, which render white and can be coloured. */
     val paintable: Boolean = false,
-    /** ARGB colour painted on the worn piece, or null for its own colour. */
-    val paint: Int? = null,
+    /** Colour per part (0 band, 1 decoration), as ARGB. Parts not in the map keep their own. */
+    val paints: Map<Int, Int> = emptyMap(),
+    /** The part the colour wheel colours. */
+    val paintPart: Int = 0,
+    /** How many parts the loaded ring has: 1, or 2 when the server split off the decoration. */
+    val parts: Int = 1,
+    /** How the ring is turned while painting, in degrees. */
+    val turnYaw: Float = 0f,
+    val turnPitch: Float = 0f,
 )
 
 data class GalleryUiState(
@@ -67,8 +74,22 @@ sealed interface RingWearEvent {
 
     data class ChooseMaterial(val material: Material) : RingWearEvent
 
-    /** Colours the worn clay or resin ring. [color] is ARGB, from the colour wheel. */
+    /** Colours the chosen part of the clay or resin ring. [color] is ARGB, from the wheel. */
     data class PaintRing(val color: Int) : RingWearEvent
+
+    data class ChoosePaintPart(val part: Int) : RingWearEvent
+
+    /** Turns the ring held up for painting, in degrees. */
+    data class TurnRing(val yaw: Float, val pitch: Float) : RingWearEvent
+
+    /** Back to painting from wearing. */
+    data object OpenPainting : RingWearEvent
+
+    /** Painting done: choose a finger. */
+    data object FinishPainting : RingWearEvent
+
+    /** The 3D ring finished loading; [parts] is how many colourable parts it has. */
+    data class RingLoaded(val parts: Int) : RingWearEvent
 
     data class ChooseStyle(val style: DesignStyle) : RingWearEvent
 

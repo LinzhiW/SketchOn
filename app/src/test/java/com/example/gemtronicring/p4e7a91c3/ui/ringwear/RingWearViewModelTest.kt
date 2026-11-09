@@ -166,24 +166,40 @@ class RingWearViewModelTest {
     }
 
     @Test
-    fun `a clay piece from the gallery can be painted, an old piece cannot`() = runTest(dispatcher) {
+    fun `a clay piece is painted part by part before choosing a finger`() = runTest(dispatcher) {
         viewModel.onEvent(RingWearEvent.OpenGallery)
         advanceUntilIdle()
         val pieces = viewModel.state.value.gallery.pieces
         viewModel.onEvent(RingWearEvent.WearPiece(pieces[0]))
         advanceUntilIdle()
-        assertTrue(viewModel.state.value.paintable)
+        assertEquals(RingPhase.Painting, viewModel.state.value.phase)
+        viewModel.onEvent(RingWearEvent.RingLoaded(parts = 2))
         viewModel.onEvent(RingWearEvent.PaintRing(0xFF00FF00.toInt()))
-        assertEquals(0xFF00FF00.toInt(), viewModel.state.value.paint)
-        viewModel.onEvent(RingWearEvent.OpenGallery)
-        advanceUntilIdle()
-        viewModel.onEvent(RingWearEvent.WearPiece(pieces[1]))
-        advanceUntilIdle()
-        assertEquals(false, viewModel.state.value.paintable)
-        assertNull(viewModel.state.value.paint)
-        viewModel.onEvent(RingWearEvent.PaintRing(0xFF00FF00.toInt()))
-        assertNull(viewModel.state.value.paint)
+        viewModel.onEvent(RingWearEvent.ChoosePaintPart(1))
+        viewModel.onEvent(RingWearEvent.PaintRing(0xFFFF0000.toInt()))
+        assertEquals(mapOf(0 to 0xFF00FF00.toInt(), 1 to 0xFFFF0000.toInt()), viewModel.state.value.paints)
+        viewModel.onEvent(RingWearEvent.TurnRing(30f, 100f))
+        assertEquals(30f, viewModel.state.value.turnYaw, 0.01f)
+        assertEquals(80f, viewModel.state.value.turnPitch, 0.01f)
+        viewModel.onEvent(RingWearEvent.FinishPainting)
+        assertEquals(RingPhase.FingerChoosing, viewModel.state.value.phase)
+        viewModel.onEvent(RingWearEvent.OpenPainting)
+        assertEquals(RingPhase.Painting, viewModel.state.value.phase)
     }
+
+    @Test
+    fun `an old piece with no material goes straight to the finger choice and cannot be painted`() =
+        runTest(dispatcher) {
+            viewModel.onEvent(RingWearEvent.OpenGallery)
+            advanceUntilIdle()
+            viewModel.onEvent(RingWearEvent.WearPiece(viewModel.state.value.gallery.pieces[1]))
+            advanceUntilIdle()
+            assertEquals(RingPhase.FingerChoosing, viewModel.state.value.phase)
+            viewModel.onEvent(RingWearEvent.PaintRing(0xFF00FF00.toInt()))
+            assertTrue(viewModel.state.value.paints.isEmpty())
+            viewModel.onEvent(RingWearEvent.OpenPainting)
+            assertEquals(RingPhase.FingerChoosing, viewModel.state.value.phase)
+        }
 
     @Test
     fun `clearing the drawing clears the render`() = runTest(dispatcher) {

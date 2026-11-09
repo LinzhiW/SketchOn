@@ -47,6 +47,7 @@ internal fun CenterPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Uni
         RingPhase.Sketching -> SketchPanel(state.sketch, onEvent)
         RingPhase.Naming -> NamingPanel(state.sketch, onEvent)
         RingPhase.Making3D -> Making3dPanel(state.sketch, onEvent)
+        RingPhase.Painting -> PaintingPanel(state, onEvent)
         RingPhase.FingerChoosing -> FingerPanel(state, onEvent)
         RingPhase.HandSearching -> HandHint()
         RingPhase.TrackingUnavailable -> TrackingMessage()

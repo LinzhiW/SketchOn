@@ -62,7 +62,7 @@ class RingWearViewModel(
             RingWearEvent.OpenGallery -> openGallery()
             is RingWearEvent.WearPiece -> wear(event.piece)
             RingWearEvent.ChooseGemtronic -> {
-                _state.update { it.copy(piece = RingPiece.Gemtronic, paintable = false, paint = null) }
+                _state.update { it.copy(piece = RingPiece.Gemtronic, paintable = false, paints = emptyMap()) }
                 enter(RingPhase.FingerChoosing)
             }
             RingWearEvent.GoHome -> {
@@ -71,7 +71,21 @@ class RingWearViewModel(
             }
             is RingWearEvent.SketchChanged -> onSketchChanged(event.sketchDataUri)
             is RingWearEvent.ChooseMaterial -> rerender { it.copy(material = event.material) }
-            is RingWearEvent.PaintRing -> _state.update { if (it.paintable) it.copy(paint = event.color) else it }
+            is RingWearEvent.PaintRing ->
+                _state.update { if (it.paintable) it.copy(paints = it.paints + (it.paintPart to event.color)) else it }
+            is RingWearEvent.ChoosePaintPart ->
+                _state.update { it.copy(paintPart = event.part.coerceIn(0, it.parts - 1)) }
+            is RingWearEvent.TurnRing ->
+                _state.update {
+                    it.copy(
+                        turnYaw = (it.turnYaw + event.yaw) % 360f,
+                        turnPitch = (it.turnPitch + event.pitch).coerceIn(-80f, 80f),
+                    )
+                }
+            RingWearEvent.OpenPainting -> if (_state.value.paintable) enter(RingPhase.Painting)
+            RingWearEvent.FinishPainting -> enter(RingPhase.FingerChoosing)
+            is RingWearEvent.RingLoaded ->
+                _state.update { it.copy(parts = event.parts.coerceAtLeast(1), paintPart = 0) }
             is RingWearEvent.ChooseStyle -> rerender { it.copy(style = event.style) }
             is RingWearEvent.ChooseView -> rerender { it.copy(view = event.view) }
             RingWearEvent.ToggleSmooth ->
@@ -137,11 +151,13 @@ class RingWearViewModel(
                     it.copy(
                         piece = RingPiece.Generated(file.absolutePath),
                         paintable = Material.byId(piece.material)?.metal == false,
-                        paint = null,
+                        paints = emptyMap(),
+                        turnYaw = 0f,
+                        turnPitch = 0f,
                         gallery = it.gallery.copy(opening = null),
                     )
                 }
-                enter(RingPhase.FingerChoosing)
+                enter(if (_state.value.paintable) RingPhase.Painting else RingPhase.FingerChoosing)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -280,8 +296,11 @@ class RingWearViewModel(
         val (piece, paintable) = madePiece ?: return false
         if (!named) return false
         pendingName = null
-        _state.update { it.copy(piece = piece, paintable = paintable, paint = null) }
-        enter(RingPhase.FingerChoosing)
+        _state.update {
+            it.copy(piece = piece, paintable = paintable, paints = emptyMap(), turnYaw = 0f, turnPitch = 0f)
+        }
+        // Clay and resin are coloured first, held still in front; other rings go on at once.
+        enter(if (paintable) RingPhase.Painting else RingPhase.FingerChoosing)
         return true
     }
 

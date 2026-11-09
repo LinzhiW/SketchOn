@@ -58,7 +58,9 @@ npm --prefix server test
 
 - Home: Draw a ring, or Gallery (the Gemtronic ring plus every piece made so far, from `GET /api/library`; no accounts yet).
 - Drawing: material (clay, resin, or metal: gold, silver, rose gold, platinum), style and view (band shape, top & stone, side profile) are separate choices, combined into the prompt on the server. Each view shows a grey band guide that is sent with the drawing; no stone marker (the AI drew it as a ball).
-- Clay and resin render white with no metal or stones. After 3D, the wearer colours the whole ring with a colour wheel (`GeneratedRingRig.paint`, base colour times the white texture). Painting parts of the ring is not done yet.
+- Clay and resin render white with no metal or stones. Before choosing a finger they go through a Painting step: the ring is held still beside the panel (3x, turnable with a pad and buttons) and coloured part by part. The server splits each ring into band and decoration (`server/src/parts.js`: triangles beyond radius 0.53 in the posed ring are decoration), each with its own material; `GeneratedRingRig.paint(part, colour)` sets that material's base colour (times the white texture). Brush painting is for V4.
+- PICO's GLB loader ignores a node `matrix`; the pose is written as translation, rotation and scale. The loaded entity is that node, so never set its transform: size the ring on a holder entity around it.
+- The view's `update` runs on hand data. Anything that must change while the hand is still (the painting ring) is placed from a `LaunchedEffect` instead.
 - Drawing uses PICO's `detectDragGestures(context, targetedToEntity, ...)`: Compose's own gets only the start and one move per drag on the emulator.
 - The drawing panel is cut off past about 700 dp high and 1150 dp wide; keep the two fixed-width columns.
 - Drawing help (`ShapeStrokeUseCase`): Smooth averages out wobble; Snap shapes turns a near-circle into a true circle (least-squares fit) and closes strokes whose ends nearly meet. It acts on release, because the emulator sends too few points to detect a hold.

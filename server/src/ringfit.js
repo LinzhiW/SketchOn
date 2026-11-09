@@ -13,6 +13,8 @@
 // edge are the hole. Its centroid is the hole centre. The band's outer radius is the shortest
 // distance from there to the edge of the box; the longest is where the stone is.
 
+import { splitParts } from "./parts.js";
+
 const GLB_MAGIC = 0x46546c67;
 const JSON_CHUNK = 0x4e4f534a;
 const GRID = 96;
@@ -223,5 +225,6 @@ export function poseRing(buffer) {
   node.translation = pose.translation;
   node.rotation = pose.rotation;
   node.scale = pose.scale;
-  return { glb: writeGlb(glb.json, glb.rest), pose };
+  const { rest, parts } = splitParts(glb, pose.matrix);
+  return { glb: writeGlb(glb.json, rest), pose: { ...pose, parts } };
 }
