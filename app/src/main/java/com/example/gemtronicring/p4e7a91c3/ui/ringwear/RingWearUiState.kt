@@ -3,7 +3,6 @@ package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 import com.example.gemtronicring.p4e7a91c3.domain.model.DesignStyle
 import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.Material
-import com.example.gemtronicring.p4e7a91c3.domain.model.RingColor
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPiece
@@ -31,10 +30,13 @@ data class GalleryUiState(
     val error: String? = null,
 )
 
+/** A soft pink, so clay and resin start in a colour that suits them. */
+const val DEFAULT_COLOR: Int = 0xFFF4B6C2.toInt()
+
 data class SketchUiState(
     val material: Material = Material.Gold,
-    /** Used for clay and resin only. */
-    val color: RingColor = RingColor.Pink,
+    /** ARGB colour from the colour wheel. Used for clay and resin only. */
+    val color: Int = DEFAULT_COLOR,
     val style: DesignStyle = DesignStyle.Refined,
     val view: SketchView = SketchView.RingShape,
     /** Drawing help: average out wobble. */
@@ -66,7 +68,8 @@ sealed interface RingWearEvent {
 
     data class ChooseMaterial(val material: Material) : RingWearEvent
 
-    data class ChooseColor(val color: RingColor) : RingWearEvent
+    /** [color] is ARGB, from the colour wheel. */
+    data class ChooseColor(val color: Int) : RingWearEvent
 
     data class ChooseStyle(val style: DesignStyle) : RingWearEvent
 

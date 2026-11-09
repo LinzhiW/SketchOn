@@ -35,7 +35,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -45,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import com.example.gemtronicring.p4e7a91c3.R
 import com.example.gemtronicring.p4e7a91c3.domain.model.DesignStyle
 import com.example.gemtronicring.p4e7a91c3.domain.model.Material
-import com.example.gemtronicring.p4e7a91c3.domain.model.RingColor
 import com.example.gemtronicring.p4e7a91c3.domain.model.SketchView
 import com.example.gemtronicring.p4e7a91c3.domain.model.StrokePoint
 import com.example.gemtronicring.p4e7a91c3.domain.usecase.ShapeStrokeUseCase
@@ -257,17 +255,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
         if (!sketch.material.metal) {
             Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
                 Label(stringResource(R.string.sketch_color))
-                RingColor.entries.forEach { colour ->
-                    val swatch = Color(colour.argb)
-                    val ink = if (swatch.luminance() > 0.5f) Color.Black else Color.White
-                    Button(
-                        onClick = { onEvent(RingWearEvent.ChooseColor(colour)) },
-                        colors = ButtonDefaults.buttonColors(containerColor = swatch, contentColor = ink),
-                    ) {
-                        // A tick marks the chosen colour; the swatch itself is the label.
-                        Text(if (colour == sketch.color) "✓" else " ")
-                    }
-                }
+                ColorWheel(sketch.color) { onEvent(RingWearEvent.ChooseColor(it)) }
             }
         }
         ChoiceRow(R.string.sketch_style, DesignStyle.entries, sketch.style, ::styleLabel) {

@@ -34,8 +34,11 @@ test("rejects a material, style or view that is not on the list", () => {
 });
 
 test("puts the chosen colour into clay and resin, and leaves metals alone", () => {
-  assert.match(buildInput({ sketch: SKETCH, material: "resin", color: "mint" }).prompt, /translucent mint green resin/);
-  assert.doesNotMatch(buildInput({ sketch: SKETCH, material: "gold", color: "mint" }).prompt, /mint/);
+  assert.match(
+    buildInput({ sketch: SKETCH, material: "resin", color: "#a5e3cc" }).prompt,
+    /translucent mint green \(#A5E3CC\) resin/,
+  );
+  assert.doesNotMatch(buildInput({ sketch: SKETCH, material: "gold", color: "#a5e3cc" }).prompt, /mint/);
   assert.throws(() => buildInput({ sketch: SKETCH, material: "clay", color: "plaid" }), RenderError);
 });
 

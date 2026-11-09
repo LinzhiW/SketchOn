@@ -11,10 +11,12 @@
 // z-image image-to-image barely changed the sketch; Kontext dev took 8.7 s; fal's realtime
 // LCM socket opened but never answered.
 
+import { describeColor, isHexColor } from "./colors.js";
+
 // The headset sends ids, never free text, so the prompt stays a ring render.
 // Material is what the ring is made of; style is how it is designed; view is which side the
 // drawing shows. They are chosen separately and combined here.
-// Clay and resin take a colour ("{color}" below); metals have their own.
+// Clay and resin take a colour from the colour wheel ("{color}" below); metals have their own.
 export const MATERIALS = {
   gold: "polished yellow gold",
   silver: "brushed sterling silver",
@@ -24,16 +26,6 @@ export const MATERIALS = {
   resin: "glossy translucent {color} resin",
 };
 
-export const COLORS = {
-  pink: "pastel pink",
-  mint: "mint green",
-  sky: "sky blue",
-  lemon: "lemon yellow",
-  lilac: "lilac purple",
-  cream: "cream white",
-  red: "cherry red",
-  black: "deep black",
-};
 
 export const STYLES = {
   refined: "refined, elegant fine jewelry with delicate details",
@@ -99,6 +91,12 @@ export const ENGINES = {
   },
 };
 
+function colorWords(color) {
+  if (color === undefined) return "soft pink";
+  if (!isHexColor(color)) throw new RenderError(400, "color must be a hex colour such as #f4b6c2");
+  return describeColor(color);
+}
+
 function pick(table, id, name, fallback) {
   const key = id ?? fallback;
   const words = table[key];
@@ -114,10 +112,7 @@ export function buildInput({ sketch, material, color, style, view, engine = "kle
     throw new RenderError(413, "sketch is too large");
   }
   const words = {
-    material: pick(MATERIALS, material, "material", "gold").replace(
-      "{color}",
-      pick(COLORS, color, "color", "pink"),
-    ),
+    material: pick(MATERIALS, material, "material", "gold").replace("{color}", colorWords(color)),
     style: pick(STYLES, style, "style", "refined"),
     view: pick(VIEWS, view, "view", "front"),
   };

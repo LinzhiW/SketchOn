@@ -19,18 +19,6 @@ enum class Material(val id: String, val metal: Boolean) {
     Platinum("platinum", metal = true),
 }
 
-/** Colours for clay and resin. Ids match the server's COLORS; [argb] is the swatch. */
-enum class RingColor(val id: String, val argb: Long) {
-    Pink("pink", 0xFFF4B6C2),
-    Mint("mint", 0xFFA8E6CF),
-    Sky("sky", 0xFF9ED2F5),
-    Lemon("lemon", 0xFFFFF09A),
-    Lilac("lilac", 0xFFC8B6F2),
-    Cream("cream", 0xFFF7F1E3),
-    Red("red", 0xFFD83A3A),
-    Black("black", 0xFF1C1C1C),
-}
-
 /** How the ring is designed, separate from its material. Ids match the server's STYLES. */
 enum class DesignStyle(val id: String) {
     Refined("refined"),

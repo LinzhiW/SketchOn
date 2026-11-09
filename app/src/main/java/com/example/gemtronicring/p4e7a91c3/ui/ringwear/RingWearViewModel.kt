@@ -183,7 +183,7 @@ class RingWearViewModel(
             val image = server.render(
                     sketch,
                     options.material.id,
-                    options.color.id,
+                    "#%06x".format(options.color and 0xFFFFFF),
                     options.style.id,
                     options.view.id,
                     seed,
