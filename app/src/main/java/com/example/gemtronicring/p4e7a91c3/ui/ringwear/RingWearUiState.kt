@@ -18,6 +18,10 @@ data class RingWearUiState(
     val activeFrame: String? = null,
     val sketch: SketchUiState = SketchUiState(),
     val gallery: GalleryUiState = GalleryUiState(),
+    /** True when the worn piece is clay or resin, which render white and can be coloured. */
+    val paintable: Boolean = false,
+    /** ARGB colour painted on the worn piece, or null for its own colour. */
+    val paint: Int? = null,
 )
 
 data class GalleryUiState(
@@ -30,13 +34,8 @@ data class GalleryUiState(
     val error: String? = null,
 )
 
-/** A soft pink, so clay and resin start in a colour that suits them. */
-const val DEFAULT_COLOR: Int = 0xFFF4B6C2.toInt()
-
 data class SketchUiState(
     val material: Material = Material.Gold,
-    /** ARGB colour from the colour wheel. Used for clay and resin only. */
-    val color: Int = DEFAULT_COLOR,
     val style: DesignStyle = DesignStyle.Refined,
     val view: SketchView = SketchView.RingShape,
     /** Drawing help: average out wobble. */
@@ -68,8 +67,8 @@ sealed interface RingWearEvent {
 
     data class ChooseMaterial(val material: Material) : RingWearEvent
 
-    /** [color] is ARGB, from the colour wheel. */
-    data class ChooseColor(val color: Int) : RingWearEvent
+    /** Colours the worn clay or resin ring. [color] is ARGB, from the colour wheel. */
+    data class PaintRing(val color: Int) : RingWearEvent
 
     data class ChooseStyle(val style: DesignStyle) : RingWearEvent
 

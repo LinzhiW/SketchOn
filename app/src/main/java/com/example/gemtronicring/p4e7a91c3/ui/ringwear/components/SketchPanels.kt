@@ -7,7 +7,8 @@ import android.util.Base64
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import com.pico.spatial.ui.foundation.gesture.detectDragGestures as detectPicoDragGestures
+import com.pico.spatial.ui.foundation.gesture.TargetEntity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,6 +84,7 @@ private const val GUIDE_WIDTH_PX = 3f
 private const val GUIDE_GREY = 0xFFC8C8C8.toInt()
 private const val GALLERY_COLUMNS = 3
 private const val NAME_LIMIT = 40
+private const val WHITE = 0xFFFFFFFF.toInt()
 
 /** First panel: draw a ring, or browse what has been made. */
 @Composable
@@ -184,6 +186,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
     var lastSent by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
     val shaper = remember { ShapeStrokeUseCase() }
+    val context = LocalContext.current
     // The drag handler is set up once, so it reads the latest settings through these.
     val options by rememberUpdatedState(sketch)
     // Encodings can finish out of order; only the newest drawing may reach the server.
@@ -232,7 +235,11 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                             .background(Color.White)
                             .onSizeChanged { canvasPx = it.width }
                             .pointerInput(Unit) {
-                                detectDragGestures(
+                                // PICO's drag follows the whole path; Compose's own gets only
+                                // the start and one move on the emulator.
+                                detectPicoDragGestures(
+                                    context = context,
+                                    targetedToEntity = TargetEntity.any(),
                                     onDragStart = {
                                         current.clear()
                                         current.add(it)
@@ -328,7 +335,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                         )
                     }
                 } else {
-                    ColorWheel(sketch.color) { onEvent(RingWearEvent.ChooseColor(it)) }
+                    Body(stringResource(R.string.sketch_color_later))
                 }
             }
             Section(R.string.sketch_style) {
@@ -484,13 +491,17 @@ internal fun Making3dPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Un
 
 /** The right panel when wearing a made ring: it has no screen or gestures. */
 @Composable
-internal fun GeneratedGuide(onEvent: (RingWearEvent) -> Unit) {
+internal fun GeneratedGuide(paintable: Boolean, paint: Int?, onEvent: (RingWearEvent) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         modifier = Modifier.width(320.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
         Title(stringResource(R.string.generated_title))
         Body(stringResource(R.string.generated_body))
+        if (paintable) {
+            Label(stringResource(R.string.generated_paint))
+            ColorWheel(paint ?: WHITE) { onEvent(RingWearEvent.PaintRing(it)) }
+        }
         Button(onClick = { onEvent(RingWearEvent.ChangeFinger) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.change_finger))
         }

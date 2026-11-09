@@ -57,7 +57,10 @@ npm --prefix server test
 ## Sketch to try-on (V3)
 
 - Home: Draw a ring, or Gallery (the Gemtronic ring plus every piece made so far, from `GET /api/library`; no accounts yet).
-- Drawing: material (clay, resin, metals), style (refined, cute, vintage, minimal, bold) and view (front, side, top) are separate choices, combined into the prompt on the server. Each view shows a grey ring guide that is sent with the drawing.
+- Drawing: material (clay, resin, or metal: gold, silver, rose gold, platinum), style and view (band shape, top & stone, side profile) are separate choices, combined into the prompt on the server. Each view shows a grey band guide that is sent with the drawing; no stone marker (the AI drew it as a ball).
+- Clay and resin render white with no metal or stones. After 3D, the wearer colours the whole ring with a colour wheel (`GeneratedRingRig.paint`, base colour times the white texture). Painting parts of the ring is not done yet.
+- Drawing uses PICO's `detectDragGestures(context, targetedToEntity, ...)`: Compose's own gets only the start and one move per drag on the emulator.
+- The drawing panel is cut off past about 700 dp high and 1150 dp wide; keep the two fixed-width columns.
 - Drawing help (`ShapeStrokeUseCase`): Smooth averages out wobble; Snap shapes turns a near-circle into a true circle (least-squares fit) and closes strokes whose ends nearly meet. It acts on release, because the emulator sends too few points to detect a hold.
 - Make it 3D: Tripo on fal, 1 to 2 minutes, about $0.30. The server poses every model (`server/src/ringfit.js`): it finds the hole in the mesh, so hole along Z, centre at origin, stone up, outer diameter 1. Tripo returns rings standing or lying flat, so never trust its pose.
 - The app reaches the server at `BuildConfig.SERVER_URL` (10.0.2.2:8787 on the emulator).

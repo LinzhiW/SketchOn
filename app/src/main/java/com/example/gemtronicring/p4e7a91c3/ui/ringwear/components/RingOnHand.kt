@@ -132,13 +132,18 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             .onFailure { Log.e(TAG, "Could not load the ring", it) }
     }
     val isGemtronic = state.piece == RingPiece.Gemtronic
+    LaunchedEffect(rig, state.paint) {
+        val paint = state.paint ?: return@LaunchedEffect
+        (rig as? GeneratedRingRig)?.paint(paint)
+    }
 
     SpatialView(
         modifier = Modifier.fillMaxSize(),
         attachments = {
             AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, onEvent) }
             AttachmentPanel(GUIDE_PANEL_ID) {
-                if (isGemtronic) GestureGuide(state.activeFrame, onEvent) else GeneratedGuide(onEvent)
+                if (isGemtronic) GestureGuide(state.activeFrame, onEvent)
+                else GeneratedGuide(state.paintable, state.paint, onEvent)
             }
             AttachmentPanel(CONTROL_PANEL_ID) { ControlPanel(onEvent) }
         },

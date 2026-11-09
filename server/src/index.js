@@ -4,10 +4,11 @@
 //   POST /api/render  { "sketch": "data:image/png;base64,...", "style": "gold",
 //                       "engine": "klein" | "nano", "seed": 1234 }
 //   -> 200 { "imageUrl": "...", "requestId": "...", "ms": 840 }
-//   POST /api/to3d    { "image": "data:image/jpeg;base64,...", "name": "..." } -> 200 { "jobId": "..." }
+//   POST /api/to3d    { "image": "data:image/jpeg;base64,...", "name": "...", "material": "clay" }
+//                     -> 200 { "jobId": "..." }
 //   GET  /api/jobs/ID -> 200 { "status": "running" | "done" | "failed", "modelUrl"?, "error"? }
 //   GET  /models/ID.glb  a finished model;  GET /models/ID.jpg  the render it was made from
-//   GET  /api/library -> 200 { "pieces": [{ "id", "name"|null, "modelUrl", "pictureUrl"|null, "createdAt" }] }
+//   GET  /api/library -> 200 { "pieces": [{ "id", "name"|null, "material"|null, "modelUrl", "pictureUrl"|null, "createdAt" }] }
 //   GET  /            the sketch test page (public/sketch.html)
 
 import { createServer } from "node:http";
@@ -55,6 +56,7 @@ function library() {
     .map((id) => ({
       id,
       name: readInfo(id).name ?? null,
+      material: readInfo(id).material ?? null,
       modelUrl: `/models/${id}.glb`,
       pictureUrl: existsSync(picturePath(id)) ? `/models/${id}.jpg` : null,
       createdAt: statSync(modelPath(id)).mtimeMs,
@@ -117,8 +119,8 @@ async function route(req, res) {
     return send(res, 200, await render(await readJson(req), run));
   }
   if (req.method === "POST" && url === "/api/to3d") {
-    const { image, name } = await readJson(req);
-    const job = await to3d.start(image, name);
+    const { image, name, material } = await readJson(req);
+    const job = await to3d.start(image, name, material);
     console.log(`3D job started: ${job.jobId}`);
     return send(res, 200, job);
   }

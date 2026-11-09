@@ -70,6 +70,8 @@
     <string name="style_minimal">Minimal</string>
     <string name="style_bold">Bold</string>
     <string name="sketch_color">Colour</string>
+    <string name="sketch_color_later">Clay and resin are made in white. You can colour the ring after it is made in 3D.</string>
+    <string name="generated_paint">Colour your ring</string>
     <string name="view_ring_shape">Band shape</string>
     <string name="view_from_above">Top &amp; stone</string>
     <string name="view_profile">Side profile</string>

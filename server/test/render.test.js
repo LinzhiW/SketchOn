@@ -33,18 +33,17 @@ test("rejects a material, style or view that is not on the list", () => {
   assert.throws(() => buildInput({ sketch: SKETCH, view: "back" }), RenderError);
 });
 
-test("puts the chosen colour into clay and resin, and leaves metals alone", () => {
-  assert.match(
-    buildInput({ sketch: SKETCH, material: "resin", color: "#a5e3cc" }).prompt,
-    /translucent mint green \(#A5E3CC\) resin/,
-  );
-  assert.doesNotMatch(buildInput({ sketch: SKETCH, material: "gold", color: "#a5e3cc" }).prompt, /mint/);
-  assert.throws(() => buildInput({ sketch: SKETCH, material: "clay", color: "plaid" }), RenderError);
+test("clay and resin render white with no metal; metals do not get that rule", () => {
+  const clay = buildInput({ sketch: SKETCH, material: "clay", style: "refined" }).prompt;
+  assert.match(clay, /white matte polymer clay/);
+  assert.match(clay, /no metal, no gemstones/);
+  assert.doesNotMatch(clay, /jewelry/);
+  assert.doesNotMatch(buildInput({ sketch: SKETCH, material: "gold" }).prompt, /no metal/);
 });
 
 test("combines material, style and view in the prompt", () => {
   const { prompt } = buildInput({ sketch: SKETCH, material: "clay", style: "cute", view: "top" });
-  assert.match(prompt, /polymer clay/);
+  assert.match(prompt, /white matte polymer clay/);
   assert.match(prompt, /cartoon/);
   assert.match(prompt, /looking down at the top/);
 });

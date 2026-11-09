@@ -16,7 +16,11 @@ enum class Material(val id: String, val metal: Boolean) {
     Gold("gold", metal = true),
     Silver("silver", metal = true),
     RoseGold("rose", metal = true),
-    Platinum("platinum", metal = true),
+    Platinum("platinum", metal = true);
+
+    companion object {
+        fun byId(id: String?): Material? = entries.firstOrNull { it.id == id }
+    }
 }
 
 /** How the ring is designed, separate from its material. Ids match the server's STYLES. */
@@ -45,6 +49,8 @@ enum class SketchView(val id: String) {
 data class GalleryPiece(
     val id: String,
     val name: String?,
+    /** The material id it was made in (see [Material]), or null for older pieces. */
+    val material: String?,
     val modelUrl: String,
     val pictureUrl: String?,
 )

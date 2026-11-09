@@ -6,6 +6,7 @@ import com.example.gemtronicring.p4e7a91c3.data.remote.JobStatus
 import com.example.gemtronicring.p4e7a91c3.data.remote.SketchOnServer
 import com.example.gemtronicring.p4e7a91c3.domain.model.MenuCursor
 import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
+import com.example.gemtronicring.p4e7a91c3.domain.model.Material
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingMenu
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
@@ -56,7 +57,7 @@ class RingWearViewModel(
             RingWearEvent.OpenGallery -> openGallery()
             is RingWearEvent.WearPiece -> wear(event.piece)
             RingWearEvent.ChooseGemtronic -> {
-                _state.update { it.copy(piece = RingPiece.Gemtronic) }
+                _state.update { it.copy(piece = RingPiece.Gemtronic, paintable = false, paint = null) }
                 enter(RingPhase.FingerChoosing)
             }
             RingWearEvent.GoHome -> {
@@ -65,7 +66,7 @@ class RingWearViewModel(
             }
             is RingWearEvent.SketchChanged -> onSketchChanged(event.sketchDataUri)
             is RingWearEvent.ChooseMaterial -> rerender { it.copy(material = event.material) }
-            is RingWearEvent.ChooseColor -> rerender { it.copy(color = event.color) }
+            is RingWearEvent.PaintRing -> _state.update { if (it.paintable) it.copy(paint = event.color) else it }
             is RingWearEvent.ChooseStyle -> rerender { it.copy(style = event.style) }
             is RingWearEvent.ChooseView -> rerender { it.copy(view = event.view) }
             RingWearEvent.ToggleSmooth ->
@@ -131,6 +132,8 @@ class RingWearViewModel(
                 _state.update {
                     it.copy(
                         piece = RingPiece.Generated(file.absolutePath),
+                        paintable = Material.byId(piece.material)?.metal == false,
+                        paint = null,
                         gallery = it.gallery.copy(opening = null),
                     )
                 }
@@ -183,7 +186,6 @@ class RingWearViewModel(
             val image = server.render(
                     sketch,
                     options.material.id,
-                    "#%06x".format(options.color and 0xFFFFFF),
                     options.style.id,
                     options.view.id,
                     seed,
@@ -219,7 +221,8 @@ class RingWearViewModel(
             viewModelScope.launch {
                 val started = System.currentTimeMillis()
                 try {
-                    val jobId = server.start3d(render, name.trim())
+                    val material = _state.value.sketch.material
+                    val jobId = server.start3d(render, name.trim(), material.id)
                     var status: JobStatus = JobStatus.Running
                     while (status == JobStatus.Running) {
                         delay(pollIntervalMs)
@@ -231,7 +234,13 @@ class RingWearViewModel(
                         is JobStatus.Done -> {
                             val file = modelFile(jobId)
                             if (!file.exists()) server.download(result.modelUrl, file)
-                            _state.update { it.copy(piece = RingPiece.Generated(file.absolutePath)) }
+                            _state.update {
+                                it.copy(
+                                    piece = RingPiece.Generated(file.absolutePath),
+                                    paintable = !material.metal,
+                                    paint = null,
+                                )
+                            }
                             enter(RingPhase.FingerChoosing)
                         }
                         is JobStatus.Failed -> fail3d(result.reason)

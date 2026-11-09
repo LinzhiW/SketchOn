@@ -15,7 +15,6 @@ interface SketchOnServer {
     suspend fun render(
         sketchDataUri: String,
         material: String,
-        color: String,
         style: String,
         view: String,
         seed: Int,
@@ -28,7 +27,7 @@ interface SketchOnServer {
     suspend fun bytes(url: String): ByteArray
 
     /** Starts turning a render into 3D, under the user's [name], and returns the job id. */
-    suspend fun start3d(imageDataUri: String, name: String): String
+    suspend fun start3d(imageDataUri: String, name: String, material: String): String
 
     suspend fun job(jobId: String): JobStatus
 
@@ -48,7 +47,6 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
     override suspend fun render(
         sketchDataUri: String,
         material: String,
-        color: String,
         style: String,
         view: String,
         seed: Int,
@@ -57,7 +55,6 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
             JSONObject()
                 .put("sketch", sketchDataUri)
                 .put("material", material)
-                .put("color", color)
                 .put("style", style)
                 .put("view", view)
                 .put("engine", "klein")
@@ -65,8 +62,12 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
         return post("/api/render", body, RENDER_TIMEOUT_MS).getString("imageUrl")
     }
 
-    override suspend fun start3d(imageDataUri: String, name: String): String =
-        post("/api/to3d", JSONObject().put("image", imageDataUri).put("name", name), RENDER_TIMEOUT_MS)
+    override suspend fun start3d(imageDataUri: String, name: String, material: String): String =
+        post(
+                "/api/to3d",
+                JSONObject().put("image", imageDataUri).put("name", name).put("material", material),
+                RENDER_TIMEOUT_MS,
+            )
             .getString("jobId")
 
     override suspend fun library(): List<GalleryPiece> {
@@ -76,6 +77,7 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
             GalleryPiece(
                 id = p.getString("id"),
                 name = if (p.isNull("name")) null else p.optString("name").ifBlank { null },
+                material = if (p.isNull("material")) null else p.optString("material").ifBlank { null },
                 modelUrl = p.getString("modelUrl"),
                 pictureUrl = if (p.isNull("pictureUrl")) null else p.getString("pictureUrl"),
             )

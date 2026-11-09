@@ -38,7 +38,6 @@ private class FakeServer : SketchOnServer {
     override suspend fun render(
         sketchDataUri: String,
         material: String,
-        color: String,
         style: String,
         view: String,
         seed: Int,
@@ -49,16 +48,16 @@ private class FakeServer : SketchOnServer {
 
     override suspend fun library() =
         listOf(
-            GalleryPiece("piece-2", "Cloud Ring", "/models/piece-2.glb", "/models/piece-2.jpg"),
-            GalleryPiece("piece-1", null, "/models/piece-1.glb", null),
+            GalleryPiece("piece-2", "Cloud Ring", "clay", "/models/piece-2.glb", "/models/piece-2.jpg"),
+            GalleryPiece("piece-1", null, null, "/models/piece-1.glb", null),
         )
 
     override suspend fun bytes(url: String) = url.toByteArray()
 
     val names = mutableListOf<String>()
 
-    override suspend fun start3d(imageDataUri: String, name: String): String {
-        names += name
+    override suspend fun start3d(imageDataUri: String, name: String, material: String): String {
+        names += "$name/$material"
         return "job-1"
     }
 
@@ -161,6 +160,26 @@ class RingWearViewModelTest {
     }
 
     @Test
+    fun `a clay piece from the gallery can be painted, an old piece cannot`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.OpenGallery)
+        advanceUntilIdle()
+        val pieces = viewModel.state.value.gallery.pieces
+        viewModel.onEvent(RingWearEvent.WearPiece(pieces[0]))
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.paintable)
+        viewModel.onEvent(RingWearEvent.PaintRing(0xFF00FF00.toInt()))
+        assertEquals(0xFF00FF00.toInt(), viewModel.state.value.paint)
+        viewModel.onEvent(RingWearEvent.OpenGallery)
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.WearPiece(pieces[1]))
+        advanceUntilIdle()
+        assertEquals(false, viewModel.state.value.paintable)
+        assertNull(viewModel.state.value.paint)
+        viewModel.onEvent(RingWearEvent.PaintRing(0xFF00FF00.toInt()))
+        assertNull(viewModel.state.value.paint)
+    }
+
+    @Test
     fun `clearing the drawing clears the render`() = runTest(dispatcher) {
         viewModel.onEvent(RingWearEvent.StartSketch)
         viewModel.onEvent(RingWearEvent.SketchChanged("a"))
@@ -183,7 +202,9 @@ class RingWearViewModelTest {
         assertEquals(RingPhase.FingerChoosing, state.phase)
         val piece = state.piece as RingPiece.Generated
         assertTrue(File(piece.path).exists())
-        assertEquals(listOf("Cloud Ring"), server.names)
+        assertEquals(listOf("Cloud Ring/gold"), server.names)
+        // Gold is not painted; only clay and resin are.
+        assertEquals(false, state.paintable)
     }
 
     @Test

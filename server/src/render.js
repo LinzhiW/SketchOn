@@ -11,24 +11,27 @@
 // z-image image-to-image barely changed the sketch; Kontext dev took 8.7 s; fal's realtime
 // LCM socket opened but never answered.
 
-import { describeColor, isHexColor } from "./colors.js";
-
 // The headset sends ids, never free text, so the prompt stays a ring render.
 // Material is what the ring is made of; style is how it is designed; view is which side the
 // drawing shows. They are chosen separately and combined here.
-// Clay and resin take a colour from the colour wheel ("{color}" below); metals have their own.
+// Clay and resin render white, with no metal or stones: the user colours the 3D ring later.
 export const MATERIALS = {
   gold: "polished yellow gold",
   silver: "brushed sterling silver",
   rose: "rose gold",
   platinum: "platinum",
-  clay: "matte hand-shaped polymer clay in {color}",
-  resin: "glossy translucent {color} resin",
+  clay: "plain white matte polymer clay",
+  resin: "clear white translucent resin",
 };
+
+/** Materials that are not metal must not pick up metal or stones from the style words. */
+const NOT_METAL = new Set(["clay", "resin"]);
+const NOT_METAL_RULE =
+  "The whole ring is made only of this one material and is pure white: no metal, no gemstones, no settings, no other colours.";
 
 
 export const STYLES = {
-  refined: "refined, elegant fine jewelry with delicate details",
+  refined: "refined and elegant, with delicate details",
   cute: "cute cartoon style with rounded, chunky, playful shapes",
   vintage: "vintage antique style with engraved patterns",
   minimal: "minimalist modern design with clean, simple surfaces",
@@ -56,10 +59,11 @@ export class RenderError extends Error {
   }
 }
 
-function promptFor({ material, style, view }) {
+function promptFor({ material, style, view, rule }) {
   return (
     `Turn this line sketch into a photorealistic product render of a single finger ring made of ${material}, ` +
     `${style}, ${view}. ` +
+    rule +
     "Keep exactly the drawn shape, proportions and viewpoint. Faint grey lines are only a guide for the band, not part of the design. " +
     "Studio lighting, plain light grey background."
   );
@@ -91,12 +95,6 @@ export const ENGINES = {
   },
 };
 
-function colorWords(color) {
-  if (color === undefined) return "soft pink";
-  if (!isHexColor(color)) throw new RenderError(400, "color must be a hex colour such as #f4b6c2");
-  return describeColor(color);
-}
-
 function pick(table, id, name, fallback) {
   const key = id ?? fallback;
   const words = table[key];
@@ -104,7 +102,7 @@ function pick(table, id, name, fallback) {
   return words;
 }
 
-export function buildInput({ sketch, material, color, style, view, engine = "klein", seed }) {
+export function buildInput({ sketch, material, style, view, engine = "klein", seed }) {
   if (typeof sketch !== "string" || !SKETCH_PREFIX.test(sketch)) {
     throw new RenderError(400, "sketch must be a base64 PNG, JPEG or WebP data URI");
   }
@@ -112,7 +110,8 @@ export function buildInput({ sketch, material, color, style, view, engine = "kle
     throw new RenderError(413, "sketch is too large");
   }
   const words = {
-    material: pick(MATERIALS, material, "material", "gold").replace("{color}", colorWords(color)),
+    material: pick(MATERIALS, material, "material", "gold"),
+    rule: NOT_METAL.has(material) ? `${NOT_METAL_RULE} ` : "",
     style: pick(STYLES, style, "style", "refined"),
     view: pick(VIEWS, view, "view", "front"),
   };

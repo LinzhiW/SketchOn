@@ -1,6 +1,9 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear.components
 
 import com.pico.spatial.core.ecs.Entity
+import com.pico.spatial.core.ecs.ModelComponent
+import com.pico.spatial.core.ecs.resource.PhysicallyBasedMaterial
+import com.pico.spatial.core.math.Color4
 import com.pico.spatial.core.ecs.TransformComponent
 import com.pico.spatial.core.math.Vector3
 
@@ -21,6 +24,28 @@ internal interface WornRing {
  * joint's axes, so the ring only needs scaling.
  */
 internal class GeneratedRingRig private constructor(override val root: Entity) : WornRing {
+    /**
+     * Colours the whole ring. Clay and resin are made white, and glTF multiplies the base
+     * colour with the texture, so the white texture takes this colour and keeps its shading.
+     * Materials are changed in place, never swapped (swapping releases them, see RingRig).
+     */
+    fun paint(argb: Int) {
+        val colour =
+            Color4(
+                ((argb shr 16) and 0xFF) / 255f,
+                ((argb shr 8) and 0xFF) / 255f,
+                (argb and 0xFF) / 255f,
+                1f,
+            )
+        fun visit(entity: Entity) {
+            entity.components[ModelComponent::class.java]?.materials?.forEach {
+                (it as? PhysicallyBasedMaterial)?.setBaseColor(colour)
+            }
+            entity.getChildren().forEach(::visit)
+        }
+        visit(root)
+    }
+
     companion object {
         /** A 17 mm hole plus a 2 mm band, at the 3x the Gemtronic ring is shown at. */
         private const val OUTER_DIAMETER_M = 0.021f * 3f

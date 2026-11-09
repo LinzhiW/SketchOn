@@ -15,6 +15,7 @@ const IMAGE_PREFIX = /^data:image\/(png|jpeg|webp);base64,/;
 const MAX_IMAGE_CHARS = 4 * 1024 * 1024;
 const JOB_ID = /^[A-Za-z0-9-]{8,80}$/;
 const MAX_NAME = 40;
+const MATERIAL_ID = /^[a-z]{1,20}$/;
 
 export function tripoInput(imageUrl) {
   return {
@@ -37,7 +38,7 @@ export function isJobId(id) {
  * `pose(glb)` puts the ring in the app's standard pose (ringfit.js); tests may replace it.
  */
 export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }) {
-  async function start(image, name) {
+  async function start(image, name, material) {
     if (typeof image !== "string") throw new RenderError(400, "image is required");
     const title = typeof name === "string" ? name.trim().slice(0, MAX_NAME) : "";
     let url = image;
@@ -54,7 +55,8 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
     const { request_id: jobId } = await fal.queue.submit(TRIPO_MODEL, { input: tripoInput(url) });
     // The render becomes the piece's picture in the gallery.
     if (picture) store.savePicture?.(jobId, picture);
-    store.saveInfo?.(jobId, { name: title || null, createdAt: Date.now() });
+    const made = typeof material === "string" && MATERIAL_ID.test(material) ? material : null;
+    store.saveInfo?.(jobId, { name: title || null, material: made, createdAt: Date.now() });
     return { jobId };
   }
 
