@@ -17,26 +17,3 @@ enum class RenderStyle(val id: String) {
     Platinum("platinum"),
     Vintage("vintage"),
 }
-
-/** Axis-aligned bounds of a model in its own units, free of SDK types. */
-data class ModelBounds(
-    val minX: Float,
-    val minY: Float,
-    val minZ: Float,
-    val maxX: Float,
-    val maxY: Float,
-    val maxZ: Float,
-)
-
-/**
- * Scale, and the offset to apply after scaling, so the ring hole sits on the joint. When
- * [holeAlongX] is true, the scaled model is then turned a quarter turn about Y so the hole
- * runs along Z, which is the finger's axis.
- */
-data class RingFit(
-    val scale: Float,
-    val offsetX: Float,
-    val offsetY: Float,
-    val offsetZ: Float,
-    val holeAlongX: Boolean,
-)

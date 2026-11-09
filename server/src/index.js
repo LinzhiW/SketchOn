@@ -47,6 +47,7 @@ const to3d = createTo3d({
     if (!res.ok) throw new RenderError(502, `could not download the model (HTTP ${res.status})`);
     return Buffer.from(await res.arrayBuffer());
   },
+  log: (line) => console.log(line),
 });
 
 function send(res, status, body) {

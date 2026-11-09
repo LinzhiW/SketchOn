@@ -1,12 +1,8 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear.components
 
-import com.example.gemtronicring.p4e7a91c3.domain.model.ModelBounds
-import com.example.gemtronicring.p4e7a91c3.domain.usecase.FitRingUseCase
 import com.pico.spatial.core.ecs.Entity
 import com.pico.spatial.core.ecs.TransformComponent
-import com.pico.spatial.core.math.Quat
 import com.pico.spatial.core.math.Vector3
-import kotlin.math.PI
 
 /** Something worn on the finger. Only the Gemtronic ring has a screen to change. */
 internal interface WornRing {
@@ -17,39 +13,28 @@ internal interface WornRing {
     fun destroy() = root.destroy()
 }
 
-/** A ring the user drew, loaded from the GLB the render server made. */
+/**
+ * A ring the user drew, loaded from the GLB the render server made.
+ *
+ * The server already put the ring in a standard pose (server/src/ringfit.js): hole along Z,
+ * hole centre at the origin, stone towards +Y, outer diameter 1. That matches the finger
+ * joint's axes, so the ring only needs scaling.
+ */
 internal class GeneratedRingRig private constructor(override val root: Entity) : WornRing {
     companion object {
-        private val QUARTER_TURN = Quat(Vector3(0f, 1f, 0f), (PI / 2).toFloat())
+        /** A 17 mm hole plus a 2 mm band, at the 3x the Gemtronic ring is shown at. */
+        private const val OUTER_DIAMETER_M = 0.021f * 3f
 
-        /**
-         * Bounds need the entity in a scene, so [stageRoot] is where the ring will live.
-         * Returns null when the model has no size to fit.
-         */
-        suspend fun create(path: String, stageRoot: Entity): GeneratedRingRig? {
+        suspend fun create(path: String, stageRoot: Entity): GeneratedRingRig {
             val model = Entity.loadSuspend("file://$path")
-            val turn = Entity().apply { addChild(model) }
+            model.components[TransformComponent::class.java]?.setScaleVector(
+                Vector3(OUTER_DIAMETER_M, OUTER_DIAMETER_M, OUTER_DIAMETER_M)
+            )
             val root = Entity().apply {
                 enabled = false
-                addChild(turn)
+                addChild(model)
             }
             stageRoot.addChild(root)
-
-            val box = model.getVisualBounds(model)
-            val fit =
-                FitRingUseCase()
-                    .fit(ModelBounds(box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z))
-            if (fit == null) {
-                root.destroy()
-                return null
-            }
-            model.components[TransformComponent::class.java]?.apply {
-                setScaleVector(Vector3(fit.scale, fit.scale, fit.scale))
-                setPosition(Vector3(fit.offsetX, fit.offsetY, fit.offsetZ))
-            }
-            if (fit.holeAlongX) {
-                turn.components[TransformComponent::class.java]?.setQuaternion(QUARTER_TURN)
-            }
             return GeneratedRingRig(root)
         }
     }

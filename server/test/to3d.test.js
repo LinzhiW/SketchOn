@@ -22,7 +22,7 @@ function fakes({ status = "COMPLETED", data = { model_mesh: { url: "https://fal.
     urlFor: (id) => `/models/${id}.glb`,
   };
   const download = async (url) => (calls.downloads.push(url), Buffer.from("glb"));
-  return { to3d: createTo3d({ fal, store, download }), calls, saved };
+  return { to3d: createTo3d({ fal, store, download, pose: (glb) => ({ glb, pose: { holeAxis: "z", holeFound: true } }) }), calls, saved };
 }
 
 test("start uploads a data URI and submits Tripo facing the drawing", async () => {

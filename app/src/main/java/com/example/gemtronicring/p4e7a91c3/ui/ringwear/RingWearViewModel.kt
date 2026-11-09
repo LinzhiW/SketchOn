@@ -157,7 +157,8 @@ class RingWearViewModel(
                     when (val result = status) {
                         is JobStatus.Done -> {
                             modelsDir.mkdirs()
-                            val file = File(modelsDir, "$jobId.glb")
+                            // ".posed": models from before the server posed rings are not reused.
+                            val file = File(modelsDir, "$jobId.posed.glb")
                             if (!file.exists()) server.download(result.modelUrl, file)
                             _state.update { it.copy(piece = RingPiece.Generated(file.absolutePath)) }
                             enter(RingPhase.FingerChoosing)
