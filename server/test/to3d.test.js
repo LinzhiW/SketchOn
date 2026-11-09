@@ -9,6 +9,7 @@ function fakes({ status = "COMPLETED", data = { model_mesh: { url: "https://fal.
   const calls = { uploads: 0, submits: [], downloads: [] };
   const saved = new Map();
   const info = new Map();
+  const renamed = new Map();
   const fal = {
     storage: { upload: async () => (calls.uploads++, "https://fal.media/in.jpg") },
     queue: {
@@ -22,9 +23,10 @@ function fakes({ status = "COMPLETED", data = { model_mesh: { url: "https://fal.
     save: (id, bytes) => saved.set(id, bytes),
     urlFor: (id) => `/models/${id}.glb`,
     saveInfo: (id, value) => info.set(id, value),
+    renameInfo: (id, name) => renamed.set(id, name),
   };
   const download = async (url) => (calls.downloads.push(url), Buffer.from("glb"));
-  return { to3d: createTo3d({ fal, store, download, pose: (glb) => ({ glb, pose: { holeAxis: "z", holeFound: true } }) }), calls, saved, info };
+  return { to3d: createTo3d({ fal, store, download, pose: (glb) => ({ glb, pose: { holeAxis: "z", holeFound: true } }) }), calls, saved, info, renamed };
 }
 
 test("start uploads a data URI and submits Tripo facing the drawing", async () => {
@@ -41,6 +43,14 @@ test("start keeps the piece's name, trimmed and capped", async () => {
   await to3d.start(IMAGE, "  My cloud ring  " + "x".repeat(60));
   assert.equal(info.get("job-12345678").name.startsWith("My cloud ring"), true);
   assert.ok(info.get("job-12345678").name.length <= 40);
+});
+
+test("a piece can be named after its job started", async () => {
+  const { to3d, renamed } = fakes();
+  assert.deepEqual(to3d.rename("job-12345678", "  Cloud Ring "), { jobId: "job-12345678", name: "Cloud Ring" });
+  assert.equal(renamed.get("job-12345678"), "Cloud Ring");
+  assert.throws(() => to3d.rename("job-12345678", "   "), (e) => e.status === 400);
+  assert.throws(() => to3d.rename("../x", "a"), (e) => e.status === 400);
 });
 
 test("start rejects anything that is not an image", async () => {

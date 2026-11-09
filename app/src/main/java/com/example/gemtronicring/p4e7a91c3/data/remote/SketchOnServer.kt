@@ -31,6 +31,9 @@ interface SketchOnServer {
 
     suspend fun job(jobId: String): JobStatus
 
+    /** Gives a piece its name after its job has started. */
+    suspend fun nameJob(jobId: String, name: String)
+
     /** Downloads a finished model into [target]. */
     suspend fun download(modelUrl: String, target: File)
 }
@@ -94,6 +97,10 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
                 connection.disconnect()
             }
         }
+
+    override suspend fun nameJob(jobId: String, name: String) {
+        post("/api/jobs/$jobId/name", JSONObject().put("name", name), POLL_TIMEOUT_MS)
+    }
 
     override suspend fun job(jobId: String): JobStatus {
         val json = get("/api/jobs/$jobId")

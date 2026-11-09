@@ -47,6 +47,11 @@ class RingWearViewModel(
     private var renderJob: Job? = null
     private var seed = Random.nextInt(0, Int.MAX_VALUE)
     private var making3d: Job? = null
+    // The 3D job runs while the user names the piece; these join the two.
+    private var jobId: String? = null
+    private var pendingName: String? = null
+    private var madePiece: Pair<RingPiece, Boolean>? = null
+    private var named = false
 
     fun onEvent(event: RingWearEvent) {
         when (event) {
@@ -73,9 +78,8 @@ class RingWearViewModel(
                 _state.update { it.copy(sketch = it.sketch.copy(smooth = !it.sketch.smooth)) }
             RingWearEvent.ToggleShapes ->
                 _state.update { it.copy(sketch = it.sketch.copy(shapes = !it.sketch.shapes)) }
-            RingWearEvent.Make3d ->
-                if (_state.value.sketch.render != null) _state.update { it.copy(phase = RingPhase.Naming) }
-            is RingWearEvent.ConfirmMake3d -> make3d(event.name)
+            RingWearEvent.Make3d -> make3d()
+            is RingWearEvent.ConfirmMake3d -> confirmName(event.name)
             RingWearEvent.Cancel3d -> {
                 making3d?.cancel()
                 _state.update { it.copy(phase = RingPhase.Sketching) }
@@ -211,37 +215,40 @@ class RingWearViewModel(
         }
     }
 
-    private fun make3d(name: String) {
+    /**
+     * Starts the 3D job at once and asks for a name while it runs, so naming fills the wait.
+     * The ring is worn when both are done: the model is ready and the name is confirmed.
+     */
+    private fun make3d() {
         val render = _state.value.sketch.render ?: return
         making3d?.cancel()
+        jobId = null
+        madePiece = null
+        named = false
         _state.update {
-            it.copy(phase = RingPhase.Making3D, sketch = it.sketch.copy(making3dSeconds = 0, error = null))
+            it.copy(phase = RingPhase.Naming, sketch = it.sketch.copy(making3dSeconds = 0, error = null))
         }
         making3d =
             viewModelScope.launch {
                 val started = System.currentTimeMillis()
                 try {
                     val material = _state.value.sketch.material
-                    val jobId = server.start3d(render, name.trim(), material.id)
+                    val id = server.start3d(render, "", material.id)
+                    jobId = id
+                    pendingName?.let { server.nameJob(id, it) }
                     var status: JobStatus = JobStatus.Running
                     while (status == JobStatus.Running) {
                         delay(pollIntervalMs)
                         val seconds = ((System.currentTimeMillis() - started) / 1000).toInt()
                         _state.update { it.copy(sketch = it.sketch.copy(making3dSeconds = seconds)) }
-                        status = server.job(jobId)
+                        status = server.job(id)
                     }
                     when (val result = status) {
                         is JobStatus.Done -> {
-                            val file = modelFile(jobId)
+                            val file = modelFile(id)
                             if (!file.exists()) server.download(result.modelUrl, file)
-                            _state.update {
-                                it.copy(
-                                    piece = RingPiece.Generated(file.absolutePath),
-                                    paintable = !material.metal,
-                                    paint = null,
-                                )
-                            }
-                            enter(RingPhase.FingerChoosing)
+                            madePiece = RingPiece.Generated(file.absolutePath) to !material.metal
+                            wearIfReady()
                         }
                         is JobStatus.Failed -> fail3d(result.reason)
                         JobStatus.Running -> Unit
@@ -252,6 +259,30 @@ class RingWearViewModel(
                     fail3d(reasonOf(e))
                 }
             }
+    }
+
+    private fun confirmName(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || _state.value.phase != RingPhase.Naming) return
+        named = true
+        val id = jobId
+        if (id == null) {
+            // The job has not started yet; it sends the name once it has an id.
+            pendingName = trimmed
+        } else {
+            viewModelScope.launch { runCatching { server.nameJob(id, trimmed) } }
+        }
+        if (!wearIfReady()) _state.update { it.copy(phase = RingPhase.Making3D) }
+    }
+
+    /** Wears the made ring once it exists and has a name. Returns true if it did. */
+    private fun wearIfReady(): Boolean {
+        val (piece, paintable) = madePiece ?: return false
+        if (!named) return false
+        pendingName = null
+        _state.update { it.copy(piece = piece, paintable = paintable, paint = null) }
+        enter(RingPhase.FingerChoosing)
+        return true
     }
 
     private fun fail3d(reason: String) {

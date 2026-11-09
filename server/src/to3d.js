@@ -87,5 +87,14 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
     }
   }
 
-  return { start, check };
+  /** Names a piece after its job started, so the user can name it while it is made. */
+  function rename(jobId, name) {
+    if (!isJobId(jobId)) throw new RenderError(400, "bad job id");
+    const title = typeof name === "string" ? name.trim().slice(0, MAX_NAME) : "";
+    if (!title) throw new RenderError(400, "name is required");
+    store.renameInfo?.(jobId, title);
+    return { jobId, name: title };
+  }
+
+  return { start, check, rename };
 }

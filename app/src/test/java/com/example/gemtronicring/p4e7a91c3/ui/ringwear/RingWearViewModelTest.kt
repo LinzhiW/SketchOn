@@ -56,6 +56,12 @@ private class FakeServer : SketchOnServer {
 
     val names = mutableListOf<String>()
 
+    val named = mutableListOf<String>()
+
+    override suspend fun nameJob(jobId: String, name: String) {
+        named += "$jobId/$name"
+    }
+
     override suspend fun start3d(imageDataUri: String, name: String, material: String): String {
         names += "$name/$material"
         return "job-1"
@@ -195,16 +201,32 @@ class RingWearViewModelTest {
         advanceUntilIdle()
         viewModel.onEvent(RingWearEvent.Make3d)
         assertEquals(RingPhase.Naming, viewModel.state.value.phase)
+        // The job runs while the user is still naming: it is done before the name is given.
+        advanceUntilIdle()
+        assertEquals(listOf("/gold"), server.names)
+        assertEquals(RingPhase.Naming, viewModel.state.value.phase)
         viewModel.onEvent(RingWearEvent.ConfirmMake3d("  Cloud Ring "))
-        assertEquals(RingPhase.Making3D, viewModel.state.value.phase)
         advanceUntilIdle()
         val state = viewModel.state.value
         assertEquals(RingPhase.FingerChoosing, state.phase)
         val piece = state.piece as RingPiece.Generated
         assertTrue(File(piece.path).exists())
-        assertEquals(listOf("Cloud Ring/gold"), server.names)
+        assertEquals(listOf("job-1/Cloud Ring"), server.named)
         // Gold is not painted; only clay and resin are.
         assertEquals(false, state.paintable)
+    }
+
+    @Test
+    fun `naming before the model is ready waits in the making panel`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.StartSketch)
+        viewModel.onEvent(RingWearEvent.SketchChanged("a"))
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.Make3d)
+        viewModel.onEvent(RingWearEvent.ConfirmMake3d("Quick"))
+        assertEquals(RingPhase.Making3D, viewModel.state.value.phase)
+        advanceUntilIdle()
+        assertEquals(RingPhase.FingerChoosing, viewModel.state.value.phase)
+        assertEquals(listOf("job-1/Quick"), server.named)
     }
 
     @Test
@@ -216,7 +238,7 @@ class RingWearViewModelTest {
         viewModel.onEvent(RingWearEvent.Cancel3d)
         advanceUntilIdle()
         assertEquals(RingPhase.Sketching, viewModel.state.value.phase)
-        assertTrue(server.names.isEmpty())
+        assertTrue(server.named.isEmpty())
     }
 
     @Test

@@ -455,6 +455,7 @@ internal fun NamingPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 placeholder = { Text(stringResource(R.string.naming_placeholder)) },
             )
         }
+        Label(stringResource(R.string.naming_progress, sketch.making3dSeconds))
         Body(stringResource(R.string.naming_shared))
         Label(stringResource(R.string.naming_tips_title))
         Body(stringResource(R.string.naming_tip_time))
@@ -469,7 +470,7 @@ internal fun NamingPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 enabled = name.isNotBlank(),
                 colors = lightButtonColors(),
             ) {
-                Text(stringResource(R.string.sketch_make_3d))
+                Text(stringResource(R.string.naming_done))
             }
         }
     }

@@ -82,8 +82,10 @@
     <string name="naming_placeholder">For example, Cloud Ring</string>
     <string name="naming_shared">Your ring will be shared in the Gallery under this name, so others can try it on too.</string>
     <string name="naming_tips_title">Tips</string>
-    <string name="naming_tip_time">• Making it 3D takes one to two minutes.</string>
+    <string name="naming_tip_time">• Making it 3D takes one to two minutes. It has already started.</string>
     <string name="naming_tip_view">• Ring shape view gives the best 3D. Draw the whole band and put the stone on top.</string>
     <string name="naming_tip_fit">• SketchOn sizes the ring to your finger and turns it so the stone faces up.</string>
     <string name="naming_back">Keep drawing</string>
+    <string name="naming_progress">Making your ring in 3D while you name it… %1$d s</string>
+    <string name="naming_done">Done</string>
 </resources>

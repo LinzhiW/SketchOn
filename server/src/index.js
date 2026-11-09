@@ -6,6 +6,7 @@
 //   -> 200 { "imageUrl": "...", "requestId": "...", "ms": 840 }
 //   POST /api/to3d    { "image": "data:image/jpeg;base64,...", "name": "...", "material": "clay" }
 //                     -> 200 { "jobId": "..." }
+//   POST /api/jobs/ID/name { "name": "..." }  names a piece while it is being made
 //   GET  /api/jobs/ID -> 200 { "status": "running" | "done" | "failed", "modelUrl"?, "error"? }
 //   GET  /models/ID.glb  a finished model;  GET /models/ID.jpg  the render it was made from
 //   GET  /api/library -> 200 { "pieces": [{ "id", "name"|null, "material"|null, "modelUrl", "pictureUrl"|null, "createdAt" }] }
@@ -70,6 +71,7 @@ const to3d = createTo3d({
     save: (id, bytes) => writeFileSync(modelPath(id), bytes),
     savePicture: (id, bytes) => writeFileSync(picturePath(id), bytes),
     saveInfo: (id, info) => writeFileSync(infoPath(id), JSON.stringify(info)),
+    renameInfo: (id, name) => writeFileSync(infoPath(id), JSON.stringify({ ...readInfo(id), name })),
     urlFor: (id) => `/models/${id}.glb`,
   },
   download: async (url) => {
@@ -123,6 +125,11 @@ async function route(req, res) {
     const job = await to3d.start(image, name, material);
     console.log(`3D job started: ${job.jobId}`);
     return send(res, 200, job);
+  }
+  const naming = url.match(/^\/api\/jobs\/([^/]+)\/name$/);
+  if (req.method === "POST" && naming) {
+    const { name } = await readJson(req);
+    return send(res, 200, to3d.rename(naming[1], name));
   }
   const job = url.match(/^\/api\/jobs\/([^/]+)$/);
   if (req.method === "GET" && job) {
