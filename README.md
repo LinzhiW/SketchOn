@@ -4,16 +4,21 @@ Sketch a piece of jewelry in mixed reality, watch an AI render follow your lines
 
 SketchOn is a [PICO](https://developer.picoxr.com/) Spatial app. It is an early work in progress.
 
-## What works now
+## What works now (V3)
 
-- **Wear a ring on your real hand.** Tap a finger on a hand shape, raise your hand, and a 3D ring sits on that finger and follows it. The first ring is the Gemtronic smart ring.
-- **Control it like the real ring.** Tilt your finger to change pages, and click in the air to open or go back. A side panel has the same four controls as buttons, and another panel explains the gestures.
-- **Live sketch rendering (test page).** A small server turns a sketch into a photoreal render through [fal](https://fal.ai). FLUX.2 Klein 4B renders while you draw (about 0.8 s an image). Nano Banana 2 makes one more faithful render on request (about 11 s).
+1. **Draw.** Sketch a ring on a panel in mixed reality. Choose its material (clay, resin, or metal), style and view; an AI render (FLUX.2 Klein on [fal](https://fal.ai)) follows your lines while you draw.
+2. **Make it 3D.** The render becomes a 3D model with Tripo (1 to 2 minutes). You name the piece while it is made, and it is shared in the Gallery.
+3. **Colour it.** Clay and resin rings come out white. Turn the ring in front of you and colour its band and its decoration separately.
+4. **Wear it.** Choose a finger and raise your hand; the ring follows that finger. The server finds the ring's hole in the mesh and poses every model so it sits on the finger the right way up.
+5. **Gallery.** Try on the Gemtronic smart ring, with its real screens and gestures, or any piece made so far.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version and the known limitations.
 
 ## Planned
 
-- A drawing panel inside the headset, wired to the render server.
-- Turning a finished render into a 3D model, and fitting the ring hole to your finger automatically.
+- Brush painting directly on the 3D ring.
+- Testing on a headset, and hiding the band behind the finger.
+- Accounts and a real community gallery.
 - More kinds of pieces than rings.
 
 ## Repository layout
@@ -49,7 +54,7 @@ echo FAL_KEY=your-key-here > .env.local
 npm start
 ```
 
-Then open http://localhost:8787 and draw. The key stays on the server and is never sent to the browser or the headset. `.env.local` is ignored by git; never commit it.
+The app reaches the server at `http://10.0.2.2:8787`, which is your computer as seen from the PICO emulator. For a headset, build with `./gradlew assembleDebug -PsketchonServer=http://<your computer's LAN address>:8787`. You can also open http://localhost:8787 on the computer to try the live render in a browser. The key stays on the server and is never sent to the browser or the headset. `.env.local` is ignored by git; never commit it.
 
 ## License
 
