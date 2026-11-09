@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,6 +49,9 @@ import com.pico.spatial.ui.design.ButtonDefaults
 import com.pico.spatial.ui.design.PicoTheme
 import com.pico.spatial.ui.design.Text
 import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val PanelShape = RoundedCornerShape(24.dp)
 private val SquareShape = RoundedCornerShape(16.dp)
@@ -85,11 +89,24 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
     val current = remember { mutableStateListOf<Offset>() }
     var canvasPx by remember { mutableStateOf(1) }
     var lastSent by remember { mutableStateOf(0L) }
+    val scope = rememberCoroutineScope()
+    // Encodings can finish out of order; only the newest drawing may reach the server.
+    var sent by remember { mutableStateOf(0) }
+    var delivered by remember { mutableStateOf(0) }
 
+    // Turning the drawing into a PNG is slow on the emulator, so it runs off the main thread
+    // and the pen keeps up with the pointer.
     fun send() {
         lastSent = System.currentTimeMillis()
-        val all = strokes + listOf(current.toList()).filter { it.isNotEmpty() }
-        onEvent(RingWearEvent.SketchChanged(if (all.isEmpty()) null else toDataUri(all, canvasPx)))
+        val all = strokes.toList() + listOf(current.toList()).filter { it.isNotEmpty() }
+        val px = canvasPx
+        val number = ++sent
+        scope.launch {
+            val uri = if (all.isEmpty()) null else withContext(Dispatchers.Default) { toDataUri(all, px) }
+            if (number < delivered) return@launch
+            delivered = number
+            onEvent(RingWearEvent.SketchChanged(uri))
+        }
     }
 
     Column(
@@ -130,11 +147,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 val pen = Stroke(width = PEN_WIDTH_PX * size.width / SKETCH_PX, cap = StrokeCap.Round, join = StrokeJoin.Round)
                 (strokes + listOf(current.toList())).forEach { points ->
                     if (points.isEmpty()) return@forEach
-                    val path = Path().apply {
-                        moveTo(points[0].x, points[0].y)
-                        points.drop(1).forEach { lineTo(it.x, it.y) }
-                    }
-                    drawPath(path, Color.Black, style = pen)
+                    drawPath(smoothPath(points), Color.Black, style = pen)
                 }
             }
             RenderView(sketch)
@@ -297,9 +310,10 @@ private fun toDataUri(strokes: List<List<Offset>>, canvasPx: Int): String {
     strokes.forEach { points ->
         if (points.isEmpty()) return@forEach
         val path = android.graphics.Path()
-        path.moveTo(points[0].x * k, points[0].y * k)
-        if (points.size == 1) path.lineTo(points[0].x * k + 0.1f, points[0].y * k)
-        points.drop(1).forEach { path.lineTo(it.x * k, it.y * k) }
+        val scaled = points.map { Offset(it.x * k, it.y * k) }
+        path.moveTo(scaled[0].x, scaled[0].y)
+        if (scaled.size == 1) path.lineTo(scaled[0].x + 0.1f, scaled[0].y)
+        forEachCurve(scaled) { c, end -> path.quadTo(c.x, c.y, end.x, end.y) }
         canvas.drawPath(path, paint)
     }
     val out = ByteArrayOutputStream()
@@ -307,6 +321,27 @@ private fun toDataUri(strokes: List<List<Offset>>, canvasPx: Int): String {
     bitmap.recycle()
     return "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
 }
+
+/**
+ * Joins the points with curves through their midpoints, so a stroke made of few points (the
+ * emulator sends only a handful per drag) still looks drawn by hand rather than as straight
+ * segments.
+ */
+private fun forEachCurve(points: List<Offset>, curve: (control: Offset, end: Offset) -> Unit) {
+    if (points.size < 2) return
+    for (i in 1 until points.lastIndex) {
+        val mid = Offset((points[i].x + points[i + 1].x) / 2f, (points[i].y + points[i + 1].y) / 2f)
+        curve(points[i], mid)
+    }
+    curve(points.last(), points.last())
+}
+
+private fun smoothPath(points: List<Offset>): Path =
+    Path().apply {
+        moveTo(points[0].x, points[0].y)
+        if (points.size == 1) lineTo(points[0].x + 0.1f, points[0].y)
+        forEachCurve(points) { c, end -> quadraticBezierTo(c.x, c.y, end.x, end.y) }
+    }
 
 private fun decodeDataUri(uri: String): ImageBitmap? =
     runCatching {
