@@ -292,6 +292,14 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 }
             }
             Body(statusText(sketch))
+            Section(R.string.sketch_help) {
+                ButtonRow(
+                    listOf(
+                        Triple(R.string.sketch_smooth, sketch.smooth) { onEvent(RingWearEvent.ToggleSmooth) },
+                        Triple(R.string.sketch_shapes, sketch.shapes) { onEvent(RingWearEvent.ToggleShapes) },
+                    )
+                )
+            }
         }
         Column(verticalArrangement = Arrangement.spacedBy(SectionGap), modifier = Modifier.width(RightWidth)) {
             // Material is clay, resin or metal. The metals (gold, silver, rose gold, platinum)
@@ -329,14 +337,6 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 }
             }
             Section(R.string.sketch_view) { ViewPicker(sketch.view) { onEvent(RingWearEvent.ChooseView(it)) } }
-            Section(R.string.sketch_help) {
-                ButtonRow(
-                    listOf(
-                        Triple(R.string.sketch_smooth, sketch.smooth) { onEvent(RingWearEvent.ToggleSmooth) },
-                        Triple(R.string.sketch_shapes, sketch.shapes) { onEvent(RingWearEvent.ToggleShapes) },
-                    )
-                )
-            }
         }
     }
 }
@@ -584,20 +584,15 @@ private fun guideShapes(view: SketchView): List<List<StrokePoint>> {
         }
     fun box(x0: Float, y0: Float, x1: Float, y1: Float) =
         listOf(StrokePoint(x0, y0), StrokePoint(x1, y0), StrokePoint(x1, y1), StrokePoint(x0, y1), StrokePoint(x0, y0))
-    // Matches a real ring seen from each side (Design 1, posed): the band, and a small stone
-    // marker where a stone would sit.
+    // Matches a real ring's band seen from each side (Design 1, posed). No stone marker: the
+    // AI drew a marker circle as a real ball on the ring.
     return when (view) {
-        // Through the hole: the band is two circles, the stone sits on top.
-        SketchView.RingShape ->
-            listOf(
-                ellipse(0.5f, 0.6f, 0.3f, 0.3f),
-                ellipse(0.5f, 0.6f, 0.23f, 0.23f),
-                ellipse(0.5f, 0.25f, 0.06f, 0.05f),
-            )
-        // Looking down at the stone: the band crosses as a wide strip, the stone in the middle.
-        SketchView.FromAbove -> listOf(box(0.2f, 0.45f, 0.8f, 0.55f), ellipse(0.5f, 0.5f, 0.08f, 0.08f))
-        // From the side: the band is a tall narrow strip, the stone on its top end.
-        SketchView.Profile -> listOf(box(0.46f, 0.3f, 0.54f, 0.9f), ellipse(0.5f, 0.25f, 0.06f, 0.05f))
+        // Through the hole: the band is two circles.
+        SketchView.RingShape -> listOf(ellipse(0.5f, 0.6f, 0.3f, 0.3f), ellipse(0.5f, 0.6f, 0.23f, 0.23f))
+        // Looking down at the top: the band crosses as a wide strip.
+        SketchView.FromAbove -> listOf(box(0.2f, 0.45f, 0.8f, 0.55f))
+        // From the side: the band is a tall narrow strip.
+        SketchView.Profile -> listOf(box(0.46f, 0.3f, 0.54f, 0.9f))
     }
 }
 

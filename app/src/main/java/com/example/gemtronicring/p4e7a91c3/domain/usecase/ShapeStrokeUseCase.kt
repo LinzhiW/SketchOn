@@ -28,7 +28,9 @@ class ShapeStrokeUseCase {
     }
 
     fun smooth(points: List<StrokePoint>, radius: Int = 2): List<StrokePoint> {
-        if (points.size < 2 * radius + 1) return points
+        // Averaging a stroke of a handful of points (the emulator sends 5 to 7 per drag) moves
+        // the line away from where it was drawn, so only dense strokes are smoothed.
+        if (points.size < MIN_SMOOTH_POINTS) return points
         return points.indices.map { i ->
             if (i == 0 || i == points.lastIndex) return@map points[i]
             val from = maxOf(0, i - radius)
@@ -117,6 +119,7 @@ class ShapeStrokeUseCase {
 
     private companion object {
         const val MIN_POINTS = 4
+        const val MIN_SMOOTH_POINTS = 12
         const val MIN_RADIUS = 8f
         const val MAX_SPREAD = 0.12
         const val MIN_TURN = 0.8

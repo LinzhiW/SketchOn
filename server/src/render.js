@@ -60,7 +60,7 @@ function promptFor({ material, style, view }) {
   return (
     `Turn this line sketch into a photorealistic product render of a single finger ring made of ${material}, ` +
     `${style}, ${view}. ` +
-    "Keep exactly the drawn shape, proportions and viewpoint. Faint grey guide lines are only a guide. " +
+    "Keep exactly the drawn shape, proportions and viewpoint. Faint grey lines are only a guide for the band, not part of the design. " +
     "Studio lighting, plain light grey background."
   );
 }

@@ -53,8 +53,14 @@ class ShapeStrokeUseCaseTest {
     }
 
     @Test
+    fun aStrokeOfFewPointsIsNotSmoothed() {
+        val few = (0..6).map { StrokePoint(it * 10f, if (it % 2 == 0) 0f else 10f) }
+        assertEquals(few, shaper.smooth(few))
+    }
+
+    @Test
     fun smoothingKeepsTheEndsAndCalmsTheMiddle() {
-        val zigzag = (0..10).map { StrokePoint(it * 10f, if (it % 2 == 0) 0f else 10f) }
+        val zigzag = (0..14).map { StrokePoint(it * 10f, if (it % 2 == 0) 0f else 10f) }
         val smooth = shaper.smooth(zigzag)
         assertEquals(zigzag.first(), smooth.first())
         assertEquals(zigzag.last(), smooth.last())
