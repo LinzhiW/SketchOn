@@ -29,6 +29,10 @@ import com.pico.spatial.tracking.hand.HandPose
 import com.pico.spatial.tracking.hand.HandTrackingData
 import com.pico.spatial.tracking.hand.HandTrackingProvider
 import com.pico.spatial.ui.foundation.content.SpatialView
+import com.pico.spatial.ui.foundation.gesture.TargetEntity
+import com.pico.spatial.ui.foundation.gesture.detectSpatialDragGesture
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 
 private const val TAG = "SketchOn"
@@ -152,8 +156,29 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         state.paints.forEach { (part, colour) -> ring.paint(part, colour) }
     }
 
+    val context = LocalContext.current
+    val currentPhase by rememberUpdatedState(state.phase)
+    val currentRig by rememberUpdatedState(rig)
     SpatialView(
-        modifier = Modifier.fillMaxSize(),
+        modifier =
+            Modifier.fillMaxSize().pointerInput(Unit) {
+                // Dragging the ring itself turns it while it is being coloured.
+                // Only the ring itself: drags on the panels (the drawing canvas) must stay theirs.
+                val onRing =
+                    TargetEntity.any { hit ->
+                        var e: Entity? = hit
+                        val ringRoot = currentRig?.root
+                        while (e != null && e != ringRoot) e = e.getParent()
+                        e != null
+                    }
+                detectSpatialDragGesture(context = context, targetedToEntity = onRing) {
+                    if (currentPhase == RingPhase.Painting) {
+                        currentOnEvent(
+                            RingWearEvent.TurnRing(it.dragAmount.x * TURN_PER_PX, it.dragAmount.y * TURN_PER_PX)
+                        )
+                    }
+                }
+            },
         attachments = {
             AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, onEvent) }
             AttachmentPanel(GUIDE_PANEL_ID) {
@@ -202,6 +227,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
     }
 }
 
+private const val TURN_PER_PX = 0.4f
 private val PAINT_POSITION = Vector3(0.36f, 1.45f, -0.95f)
 private const val PAINT_SCALE = 3f
 

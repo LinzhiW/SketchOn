@@ -1,6 +1,10 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear.components
 
+import com.pico.spatial.core.ecs.CollisionComponent
 import com.pico.spatial.core.ecs.Entity
+import com.pico.spatial.core.ecs.InteractableComponent
+import com.pico.spatial.core.ecs.resource.PhysicsMaterialResource
+import com.pico.spatial.core.ecs.resource.ShapeResource
 import com.pico.spatial.core.ecs.ModelComponent
 import com.pico.spatial.core.ecs.resource.PhysicallyBasedMaterial
 import com.pico.spatial.core.math.Color4
@@ -81,6 +85,8 @@ internal class GeneratedRingRig private constructor(override val root: Entity) :
     companion object {
         /** A 17 mm hole plus a 2 mm band, at the 3x the Gemtronic ring is shown at. */
         private const val OUTER_DIAMETER_M = 0.021f * 3f
+        /** A little more than the ring's outer radius, so the whole ring can be grabbed. */
+        private const val GRAB_RADIUS_M = OUTER_DIAMETER_M * 0.7f
 
         suspend fun create(path: String, stageRoot: Entity): GeneratedRingRig {
             // The loaded entity is the GLB's node itself and carries the server's pose
@@ -97,6 +103,14 @@ internal class GeneratedRingRig private constructor(override val root: Entity) :
             val root = Entity().apply {
                 enabled = false
                 addChild(size)
+                // Grabbable, so the user can turn it by dragging it while colouring it.
+                components.set(InteractableComponent())
+                components.set(
+                    CollisionComponent(
+                        collisionShape = listOf(ShapeResource.createSphere(GRAB_RADIUS_M)),
+                        physicsMaterial = PhysicsMaterialResource(),
+                    )
+                )
             }
             stageRoot.addChild(root)
             return GeneratedRingRig(root)

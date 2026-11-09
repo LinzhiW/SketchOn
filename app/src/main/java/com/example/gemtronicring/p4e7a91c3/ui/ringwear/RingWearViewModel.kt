@@ -71,8 +71,11 @@ class RingWearViewModel(
             }
             is RingWearEvent.SketchChanged -> onSketchChanged(event.sketchDataUri)
             is RingWearEvent.ChooseMaterial -> rerender { it.copy(material = event.material) }
+            // One colour for the whole ring for now; colouring by part comes later.
             is RingWearEvent.PaintRing ->
-                _state.update { if (it.paintable) it.copy(paints = it.paints + (it.paintPart to event.color)) else it }
+                _state.update {
+                    if (it.paintable) it.copy(paints = (0 until it.parts).associateWith { event.color }) else it
+                }
             is RingWearEvent.ChoosePaintPart ->
                 _state.update { it.copy(paintPart = event.part.coerceIn(0, it.parts - 1)) }
             is RingWearEvent.TurnRing ->

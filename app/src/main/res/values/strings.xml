@@ -89,14 +89,12 @@
     <string name="naming_done">Done</string>
     <string name="generated_recolour">Recolour</string>
     <string name="painting_title">Colour your ring</string>
-    <string name="painting_body">Turn the ring to see every side, choose a part, then pick its colour.</string>
-    <string name="painting_part">Part</string>
-    <string name="painting_band">Band</string>
-    <string name="painting_decoration">Decoration</string>
+    <string name="painting_body">Pick a colour for your ring. Turn it to see every side.</string>
     <string name="painting_turn">Turn the ring</string>
-    <string name="painting_turn_hint">Drag here to turn</string>
     <string name="painting_left">Left</string>
     <string name="painting_right">Right</string>
     <string name="painting_up">Up</string>
     <string name="painting_down">Down</string>
+    <string name="painting_parts_soon">Colouring the band and the decoration separately: coming soon.</string>
+    <string name="painting_drag">Drag the ring itself to turn it, or use the buttons.</string>
 </resources>

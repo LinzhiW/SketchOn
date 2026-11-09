@@ -12,7 +12,7 @@ The project grew from a single smart ring into **SketchOn**: sketch a ring, watc
 - **Drawing help.** *Smooth* removes wobble from dense strokes. *Snap shapes* turns a stroke that goes nearly all the way round into a true circle, and closes strokes whose ends nearly meet.
 - **Make it 3D, named while it is made.** The render goes to Tripo through fal (1 to 2 minutes). The 3D job starts at once, and the user names the piece meanwhile; the piece is then shared in the Gallery under that name.
 - **Automatic fit.** The server finds the ring's hole in the generated mesh and poses every model the same way: hole along the finger, stone on top, outer diameter fixed. Tripo returns rings standing, lying flat or turned, so its own pose is never trusted.
-- **Colour before wearing.** Clay and resin rings render white. Before choosing a finger, the ring is held still beside the panel; turn it, choose the band or the decoration, and colour each part with a colour wheel. The server splits each ring into those two parts.
+- **Colour before wearing.** Clay and resin rings render white. Before choosing a finger, the ring is held beside the panel; drag the ring itself (or use the buttons) to turn it, and colour it with a colour wheel. The server already splits each ring into band and decoration; colouring them separately is coming soon.
 - **Wear it.** Choose a finger and raise your hand; the ring follows that finger, as the Gemtronic ring does.
 
 ### Fixed
@@ -33,7 +33,7 @@ The project grew from a single smart ring into **SketchOn**: sketch a ring, watc
 - Tested on the PICO Emulator only, not on a headset.
 - The render server must run on a computer with a fal API key. The app reaches it at `10.0.2.2:8787` on the emulator; a headset build needs `-PsketchonServer=http://<computer>:8787`. The Gemtronic ring works without the server.
 - Drawing on the emulator is coarse, since it sends very few points per drag.
-- Colour is per part (band, decoration), not by brush. Brush painting on the 3D ring is planned for V4.
+- The ring takes one colour. Colouring the band and the decoration separately, and brush painting on the 3D ring, are planned for V4.
 - The band still draws over the finger (no occlusion), and rings are shown at 3x for the emulator's arm's-length view.
 - The Gallery is one shared list on the server; there are no accounts yet.
 

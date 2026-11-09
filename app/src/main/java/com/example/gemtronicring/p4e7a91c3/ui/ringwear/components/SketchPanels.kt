@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +65,7 @@ import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.design.TextField
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -87,7 +89,6 @@ private const val GUIDE_WIDTH_PX = 3f
 private const val GUIDE_GREY = 0xFFC8C8C8.toInt()
 private const val GALLERY_COLUMNS = 3
 private const val NAME_LIMIT = 40
-private const val TURN_PER_PX = 0.5f
 private const val WHITE = 0xFFFFFFFF.toInt()
 
 /** First panel: draw a ring, or browse what has been made. */
@@ -485,42 +486,19 @@ internal fun NamingPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
  */
 @Composable
 internal fun PaintingPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit) {
-    val current = state.paints[state.paintPart] ?: WHITE
+    val current = state.paints[0] ?: WHITE
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         modifier = Modifier.width(440.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
         Title(stringResource(R.string.painting_title))
         Body(stringResource(R.string.painting_body))
-        if (state.parts > 1) {
-            Section(R.string.painting_part) {
-                ButtonRow(
-                    listOf(
-                        Triple(R.string.painting_band, state.paintPart == 0) { onEvent(RingWearEvent.ChoosePaintPart(0)) },
-                        Triple(R.string.painting_decoration, state.paintPart == 1) { onEvent(RingWearEvent.ChoosePaintPart(1)) },
-                    )
-                )
-            }
-        }
         Section(R.string.sketch_color) {
             ColorWheel(current) { onEvent(RingWearEvent.PaintRing(it)) }
         }
+        Label(stringResource(R.string.painting_parts_soon))
         Section(R.string.painting_turn) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier =
-                    Modifier.size(width = 380.dp, height = 96.dp)
-                        .clip(SquareShape)
-                        .background(Dim)
-                        .pointerInput(Unit) {
-                            detectDragGestures { change, amount ->
-                                change.consume()
-                                onEvent(RingWearEvent.TurnRing(amount.x * TURN_PER_PX, amount.y * TURN_PER_PX))
-                            }
-                        },
-            ) {
-                Body(stringResource(R.string.painting_turn_hint))
-            }
+            Body(stringResource(R.string.painting_drag))
             ButtonRow(
                 listOf(
                     Triple(R.string.painting_left, false) { onEvent(RingWearEvent.TurnRing(-45f, 0f)) },

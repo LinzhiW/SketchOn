@@ -8,7 +8,7 @@ SketchOn is a [PICO](https://developer.picoxr.com/) Spatial app. It is an early 
 
 1. **Draw.** Sketch a ring on a panel in mixed reality. Choose its material (clay, resin, or metal), style and view; an AI render (FLUX.2 Klein on [fal](https://fal.ai)) follows your lines while you draw.
 2. **Make it 3D.** The render becomes a 3D model with Tripo (1 to 2 minutes). You name the piece while it is made, and it is shared in the Gallery.
-3. **Colour it.** Clay and resin rings come out white. Turn the ring in front of you and colour its band and its decoration separately.
+3. **Colour it.** Clay and resin rings come out white. Turn the ring in front of you by dragging it, and pick its colour.
 4. **Wear it.** Choose a finger and raise your hand; the ring follows that finger. The server finds the ring's hole in the mesh and poses every model so it sits on the finger the right way up.
 5. **Gallery.** Try on the Gemtronic smart ring, with its real screens and gestures, or any piece made so far.
 
