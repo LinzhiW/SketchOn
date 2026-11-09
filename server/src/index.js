@@ -13,16 +13,22 @@
 //   GET  /api/jobs/ID -> 200 { "status": "running" | "done" | "failed", "modelUrl"?, "error"? }
 //   GET  /models/ID.glb  a finished model;  GET /models/ID.jpg  the render it was made from
 //   GET  /api/library -> 200 { "pieces": [{ "id", "name"|null, "author"|null, "material"|null, "modelUrl", "pictureUrl"|null, "createdAt" }] }
-//   GET  /            the sketch test page (public/sketch.html)
+//   GET  /            the sketch test page (public/sketch.html);  GET /health  for the host
+//
+// Where things are kept is set by the environment:
+//   DATABASE_URL               Postgres (Supabase) for accounts and pieces; else server/data/sketchon.db
+//   SUPABASE_URL + SUPABASE_SERVICE_KEY   Supabase Storage for models and pictures; else server/models/
+//   PORT                       set by the host (Render); 8787 on a computer
 
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { fal } from "@fal-ai/client";
 import { render, RenderError } from "./render.js";
 import { createTo3d, isJobId } from "./to3d.js";
 import { openDb } from "./db.js";
+import { localStorage, supabaseStorage } from "./storage.js";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
@@ -39,14 +45,20 @@ if (!process.env.FAL_KEY) {
 fal.config({ credentials: process.env.FAL_KEY });
 mkdirSync(MODELS_DIR, { recursive: true });
 mkdirSync(DATA_DIR, { recursive: true });
-const db = openDb(`${DATA_DIR}sketchon.db`);
+const db = await openDb(process.env.DATABASE_URL || `${DATA_DIR}sketchon.db`);
+const cloud = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY);
+const files = cloud
+  ? await supabaseStorage({ url: process.env.SUPABASE_URL, serviceKey: process.env.SUPABASE_SERVICE_KEY })
+  : localStorage(MODELS_DIR);
+console.log(
+  `accounts in ${process.env.DATABASE_URL ? "Postgres" : "SQLite"}, files in ${cloud ? "Supabase Storage" : "server/models"}`,
+);
 
 async function run(model, input) {
   const result = await fal.run(model, { input });
   return { images: result?.data?.images, requestId: result?.requestId };
 }
 
-const modelPath = (id) => `${MODELS_DIR}${id}.glb`;
 const picturePath = (id) => `${MODELS_DIR}${id}.jpg`;
 const infoPath = (id) => `${MODELS_DIR}${id}.json`;
 const readInfo = (id) => {
@@ -58,30 +70,35 @@ const readInfo = (id) => {
 };
 
 // Pieces from before accounts kept their name and material in a .json file beside the model.
-for (const file of readdirSync(MODELS_DIR).filter((f) => f.endsWith(".glb"))) {
-  const id = file.slice(0, -4);
-  if (isJobId(id) && db.importLegacy(id, readInfo(id), LEGACY_AUTHOR)) {
-    console.log(`imported ${id} (${readInfo(id).name ?? "unnamed"}) as made by ${LEGACY_AUTHOR}`);
+// Only on a computer: in the cloud they are moved over by scripts/migrate-to-cloud.js.
+if (!cloud) {
+  for (const file of readdirSync(MODELS_DIR).filter((f) => f.endsWith(".glb"))) {
+    const id = file.slice(0, -4);
+    if (isJobId(id) && (await db.importLegacy(id, readInfo(id), LEGACY_AUTHOR))) {
+      console.log(`imported ${id} (${readInfo(id).name ?? "unnamed"}) as made by ${LEGACY_AUTHOR}`);
+    }
   }
 }
 
+const fileUrl = (id, ext) => files.publicUrl(`${id}.${ext}`) ?? `/models/${id}.${ext}`;
+
 /** Every finished piece, newest first, with its maker. */
-function library() {
-  return db
-    .pieces()
-    .filter((p) => isJobId(p.id) && existsSync(modelPath(p.id)))
+async function library() {
+  return (await db.pieces())
+    .filter((p) => isJobId(p.id))
     .map((p) => ({
       ...p,
-      modelUrl: `/models/${p.id}.glb`,
-      pictureUrl: existsSync(picturePath(p.id)) ? `/models/${p.id}.jpg` : null,
+      modelUrl: fileUrl(p.id, "glb"),
+      // In the cloud every piece made by the app has its picture; on a computer, check.
+      pictureUrl: cloud || existsSync(picturePath(p.id)) ? fileUrl(p.id, "jpg") : null,
     }));
 }
 
 /** The signed-in user, or a 401. */
-function userOf(req) {
+async function userOf(req) {
   const header = req.headers.authorization ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  const user = db.userForToken(token);
+  const user = await db.userForToken(token);
   if (!user) throw new RenderError(401, "Please log in.");
   return { user, token };
 }
@@ -89,12 +106,15 @@ function userOf(req) {
 const to3d = createTo3d({
   fal,
   store: {
-    has: (id) => existsSync(modelPath(id)),
-    save: (id, bytes) => writeFileSync(modelPath(id), bytes),
-    savePicture: (id, bytes) => writeFileSync(picturePath(id), bytes),
+    has: (id) => files.has(`${id}.glb`),
+    save: async (id, bytes) => {
+      await files.put(`${id}.glb`, bytes, "model/gltf-binary");
+      await db.markReady(id);
+    },
+    savePicture: (id, bytes) => files.put(`${id}.jpg`, bytes, "image/jpeg"),
     saveInfo: (id, info) => db.addPiece({ id, ...info }),
     renameInfo: (id, name, user) => db.renamePiece(id, name, user),
-    urlFor: (id) => `/models/${id}.glb`,
+    urlFor: (id) => fileUrl(id, "glb"),
   },
   download: async (url) => {
     const res = await fetch(url);
@@ -141,22 +161,23 @@ async function route(req, res) {
   }
   if (req.method === "POST" && (url === "/api/signup" || url === "/api/login")) {
     const { name, password } = await readJson(req);
-    const session = url === "/api/signup" ? db.signUp(name, password) : db.logIn(name, password);
+    const session = url === "/api/signup" ? await db.signUp(name, password) : await db.logIn(name, password);
     console.log(`${url === "/api/signup" ? "signed up" : "logged in"}: ${session.user.name}`);
     return send(res, 200, session);
   }
   if (req.method === "POST" && url === "/api/logout") {
     const header = req.headers.authorization ?? "";
-    db.logOut(header.startsWith("Bearer ") ? header.slice(7) : "");
+    await db.logOut(header.startsWith("Bearer ") ? header.slice(7) : "");
     return send(res, 200, { ok: true });
   }
-  if (req.method === "GET" && url === "/api/me") return send(res, 200, { user: userOf(req).user });
+  if (req.method === "GET" && url === "/health") return send(res, 200, { ok: true });
+  if (req.method === "GET" && url === "/api/me") return send(res, 200, { user: (await userOf(req)).user });
   if (req.method === "POST" && url === "/api/render") {
-    userOf(req);
+    await userOf(req);
     return send(res, 200, await render(await readJson(req), run));
   }
   if (req.method === "POST" && url === "/api/to3d") {
-    const { user } = userOf(req);
+    const { user } = await userOf(req);
     const { image, name, material } = await readJson(req);
     const job = await to3d.start(image, name, material, user);
     console.log(`3D job started: ${job.jobId} by ${user.name}`);
@@ -164,9 +185,9 @@ async function route(req, res) {
   }
   const naming = url.match(/^\/api\/jobs\/([^/]+)\/name$/);
   if (req.method === "POST" && naming) {
-    const { user } = userOf(req);
+    const { user } = await userOf(req);
     const { name } = await readJson(req);
-    return send(res, 200, to3d.rename(naming[1], name, user));
+    return send(res, 200, await to3d.rename(naming[1], name, user));
   }
   const job = url.match(/^\/api\/jobs\/([^/]+)$/);
   if (req.method === "GET" && job) {
@@ -179,13 +200,13 @@ async function route(req, res) {
       return send(res, 200, { status: "failed", error: reason });
     }
   }
-  if (req.method === "GET" && url === "/api/library") return send(res, 200, { pieces: library() });
+  if (req.method === "GET" && url === "/api/library") return send(res, 200, { pieces: await library() });
   const file = url.match(/^\/models\/([^/]+)\.(glb|jpg)$/);
   if (req.method === "GET" && file && isJobId(file[1])) {
-    const path = file[2] === "glb" ? modelPath(file[1]) : picturePath(file[1]);
-    if (existsSync(path)) {
+    const bytes = await files.get(`${file[1]}.${file[2]}`);
+    if (bytes) {
       res.writeHead(200, { "Content-Type": file[2] === "glb" ? "model/gltf-binary" : "image/jpeg" });
-      return res.end(readFileSync(path));
+      return res.end(bytes);
     }
   }
   send(res, 404, { error: "not found" });

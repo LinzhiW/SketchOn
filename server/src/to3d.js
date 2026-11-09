@@ -54,15 +54,15 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
     }
     const { request_id: jobId } = await fal.queue.submit(TRIPO_MODEL, { input: tripoInput(url) });
     // The render becomes the piece's picture in the gallery.
-    if (picture) store.savePicture?.(jobId, picture);
+    if (picture) await store.savePicture?.(jobId, picture);
     const made = typeof material === "string" && MATERIAL_ID.test(material) ? material : null;
-    store.saveInfo?.(jobId, { name: title || null, material: made, createdAt: Date.now(), user });
+    await store.saveInfo?.(jobId, { name: title || null, material: made, createdAt: Date.now(), user });
     return { jobId };
   }
 
   async function check(jobId) {
     if (!isJobId(jobId)) throw new RenderError(400, "bad job id");
-    if (store.has(jobId)) return { status: "done", modelUrl: store.urlFor(jobId) };
+    if (await store.has(jobId)) return { status: "done", modelUrl: store.urlFor(jobId) };
     const status = await fal.queue.status(TRIPO_MODEL, { requestId: jobId, logs: false });
     if (status.status !== "COMPLETED") {
       return { status: "running", queuePosition: status.queue_position ?? null };
@@ -71,7 +71,7 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
     const mesh = result?.data?.pbr_model?.url ?? result?.data?.model_mesh?.url;
     if (!mesh) return { status: "failed", error: "Tripo returned no model" };
     const raw = await download(mesh);
-    store.save(jobId, posed(raw, jobId));
+    await store.save(jobId, posed(raw, jobId));
     return { status: "done", modelUrl: store.urlFor(jobId) };
   }
 
@@ -88,11 +88,11 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
   }
 
   /** Names a piece after its job started, so the user can name it while it is made. */
-  function rename(jobId, name, user) {
+  async function rename(jobId, name, user) {
     if (!isJobId(jobId)) throw new RenderError(400, "bad job id");
     const title = typeof name === "string" ? name.trim().slice(0, MAX_NAME) : "";
     if (!title) throw new RenderError(400, "name is required");
-    store.renameInfo?.(jobId, title, user);
+    await store.renameInfo?.(jobId, title, user);
     return { jobId, name: title };
   }
 

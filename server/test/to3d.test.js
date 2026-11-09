@@ -47,10 +47,10 @@ test("start keeps the piece's name, trimmed and capped", async () => {
 
 test("a piece can be named after its job started", async () => {
   const { to3d, renamed } = fakes();
-  assert.deepEqual(to3d.rename("job-12345678", "  Cloud Ring "), { jobId: "job-12345678", name: "Cloud Ring" });
+  assert.deepEqual(await to3d.rename("job-12345678", "  Cloud Ring "), { jobId: "job-12345678", name: "Cloud Ring" });
   assert.equal(renamed.get("job-12345678"), "Cloud Ring");
-  assert.throws(() => to3d.rename("job-12345678", "   "), (e) => e.status === 400);
-  assert.throws(() => to3d.rename("../x", "a"), (e) => e.status === 400);
+  await assert.rejects(to3d.rename("job-12345678", "   "), (e) => e.status === 400);
+  await assert.rejects(to3d.rename("../x", "a"), (e) => e.status === 400);
 });
 
 test("start rejects anything that is not an image", async () => {
