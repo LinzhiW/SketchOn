@@ -1,6 +1,9 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 
+import com.example.gemtronicring.p4e7a91c3.data.local.SessionStore
 import com.example.gemtronicring.p4e7a91c3.data.remote.JobStatus
+import com.example.gemtronicring.p4e7a91c3.data.remote.NotLoggedInException
+import com.example.gemtronicring.p4e7a91c3.data.remote.Session
 import com.example.gemtronicring.p4e7a91c3.data.remote.SketchOnServer
 import com.example.gemtronicring.p4e7a91c3.data.repository.BundledRingMenuRepository
 import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
@@ -31,7 +34,37 @@ import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 
 /** Answers instantly and records what it was asked. */
+private class FakeSessions(var saved: Session? = Session("t-1", "Tester")) : SessionStore {
+    override fun load() = saved
+
+    override fun save(session: Session) {
+        saved = session
+    }
+
+    override fun clear() {
+        saved = null
+    }
+}
+
 private class FakeServer : SketchOnServer {
+    override var token: String? = null
+    var loggedOutBy401 = false
+
+    override suspend fun signUp(name: String, password: String) = Session("t-new", name)
+
+    override suspend fun logIn(name: String, password: String): Session {
+        if (password != "secret-1") throw java.io.IOException("Wrong name or password.")
+        return Session("t-2", name)
+    }
+
+    override suspend fun logOut() {
+        token = null
+    }
+
+    override suspend fun me(): String {
+        if (loggedOutBy401) throw NotLoggedInException("Please log in.")
+        return "Tester"
+    }
     val renders = mutableListOf<String>()
     var jobPolls = 0
 
@@ -48,8 +81,8 @@ private class FakeServer : SketchOnServer {
 
     override suspend fun library() =
         listOf(
-            GalleryPiece("piece-2", "Cloud Ring", "clay", "/models/piece-2.glb", "/models/piece-2.jpg"),
-            GalleryPiece("piece-1", null, null, "/models/piece-1.glb", null),
+            GalleryPiece("piece-2", "Cloud Ring", "Ana", "clay", "/models/piece-2.glb", "/models/piece-2.jpg"),
+            GalleryPiece("piece-1", null, null, null, "/models/piece-1.glb", null),
         )
 
     override suspend fun bytes(url: String) = url.toByteArray()
@@ -78,6 +111,7 @@ class RingWearViewModelTest {
     @get:Rule val folder = TemporaryFolder()
     private val dispatcher = StandardTestDispatcher()
     private val server = FakeServer()
+    private val sessions = FakeSessions()
     private lateinit var viewModel: RingWearViewModel
 
     @Before
@@ -90,6 +124,7 @@ class RingWearViewModelTest {
                 NavigateMenuUseCase(),
                 server,
                 folder.root,
+                sessions,
                 pollIntervalMs = 10,
             )
     }
@@ -198,6 +233,58 @@ class RingWearViewModelTest {
             viewModel.onEvent(RingWearEvent.OpenPainting)
             assertEquals(RingPhase.FingerChoosing, viewModel.state.value.phase)
         }
+
+    private fun freshViewModel() =
+        RingWearViewModel(
+            BundledRingMenuRepository().menu(),
+            RingGestureUseCase(),
+            NavigateMenuUseCase(),
+            server,
+            folder.root,
+            sessions,
+            pollIntervalMs = 10,
+        )
+
+    @Test
+    fun `a saved login starts at home and sends its token`() {
+        assertEquals(RingPhase.Home, viewModel.state.value.phase)
+        assertEquals("Tester", viewModel.state.value.user)
+        assertEquals("t-1", server.token)
+    }
+
+    @Test
+    fun `no saved login starts at the login panel, and logging in saves it`() = runTest(dispatcher) {
+        sessions.saved = null
+        val vm = freshViewModel()
+        assertEquals(RingPhase.Login, vm.state.value.phase)
+        vm.onEvent(RingWearEvent.LogIn("Ana", "wrong-1"))
+        advanceUntilIdle()
+        assertEquals("Wrong name or password.", vm.state.value.login.error)
+        vm.onEvent(RingWearEvent.LogIn("Ana", "secret-1"))
+        advanceUntilIdle()
+        assertEquals(RingPhase.Home, vm.state.value.phase)
+        assertEquals("Ana", vm.state.value.user)
+        assertEquals(Session("t-2", "Ana"), sessions.saved)
+    }
+
+    @Test
+    fun `a saved login the server no longer accepts goes back to the login panel`() = runTest(dispatcher) {
+        server.loggedOutBy401 = true
+        val vm = freshViewModel()
+        advanceUntilIdle()
+        assertEquals(RingPhase.Login, vm.state.value.phase)
+        assertNull(sessions.saved)
+    }
+
+    @Test
+    fun `logging out forgets the login`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.LogOut)
+        advanceUntilIdle()
+        assertEquals(RingPhase.Login, viewModel.state.value.phase)
+        assertNull(viewModel.state.value.user)
+        assertNull(sessions.saved)
+        assertNull(server.token)
+    }
 
     @Test
     fun `clearing the drawing clears the render`() = runTest(dispatcher) {

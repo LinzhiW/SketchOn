@@ -51,3 +51,4 @@ server/node_modules/
 # Private submission material, kept out of the public repository
 submission/
 server/models/
+server/data/

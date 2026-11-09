@@ -18,6 +18,9 @@ data class RingWearUiState(
     val activeFrame: String? = null,
     val sketch: SketchUiState = SketchUiState(),
     val gallery: GalleryUiState = GalleryUiState(),
+    /** The signed-in user's name, or null. */
+    val user: String? = null,
+    val login: LoginUiState = LoginUiState(),
     /** True when the worn piece is clay or resin, which render white and can be coloured. */
     val paintable: Boolean = false,
     /** Colour per part (0 band, 1 decoration), as ARGB. Parts not in the map keep their own. */
@@ -30,6 +33,8 @@ data class RingWearUiState(
     val turnYaw: Float = 0f,
     val turnPitch: Float = 0f,
 )
+
+data class LoginUiState(val busy: Boolean = false, val error: String? = null)
 
 data class GalleryUiState(
     val pieces: List<GalleryPiece> = emptyList(),
@@ -59,6 +64,15 @@ data class SketchUiState(
 )
 
 sealed interface RingWearEvent {
+    data class LogIn(val name: String, val password: String) : RingWearEvent
+
+    data class SignUp(val name: String, val password: String) : RingWearEvent
+
+    data object LogOut : RingWearEvent
+
+    /** From the home panel when no one is signed in. */
+    data object OpenLogin : RingWearEvent
+
     data object StartSketch : RingWearEvent
 
     data object OpenGallery : RingWearEvent

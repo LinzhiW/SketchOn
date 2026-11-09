@@ -1,15 +1,18 @@
 // A small HTTP server between the headset and fal. The fal key lives here, never in the APK
 // or the browser.
 //
-//   POST /api/render  { "sketch": "data:image/png;base64,...", "style": "gold",
+//   POST /api/signup, /api/login  { "name": "...", "password": "..." } -> 200 { "token", "user": { "id", "name" } }
+//   POST /api/logout;  GET /api/me -> 200 { "user" }
+//   Requests marked [login] need "Authorization: Bearer <token>".
+//   POST /api/render [login] { "sketch": "data:image/png;base64,...", "style": "gold",
 //                       "engine": "klein" | "nano", "seed": 1234 }
 //   -> 200 { "imageUrl": "...", "requestId": "...", "ms": 840 }
-//   POST /api/to3d    { "image": "data:image/jpeg;base64,...", "name": "...", "material": "clay" }
+//   POST /api/to3d [login] { "image": "data:image/jpeg;base64,...", "name": "...", "material": "clay" }
 //                     -> 200 { "jobId": "..." }
-//   POST /api/jobs/ID/name { "name": "..." }  names a piece while it is being made
+//   POST /api/jobs/ID/name [login] { "name": "..." }  names a piece while it is being made
 //   GET  /api/jobs/ID -> 200 { "status": "running" | "done" | "failed", "modelUrl"?, "error"? }
 //   GET  /models/ID.glb  a finished model;  GET /models/ID.jpg  the render it was made from
-//   GET  /api/library -> 200 { "pieces": [{ "id", "name"|null, "material"|null, "modelUrl", "pictureUrl"|null, "createdAt" }] }
+//   GET  /api/library -> 200 { "pieces": [{ "id", "name"|null, "author"|null, "material"|null, "modelUrl", "pictureUrl"|null, "createdAt" }] }
 //   GET  /            the sketch test page (public/sketch.html)
 
 import { createServer } from "node:http";
@@ -19,11 +22,15 @@ import { fileURLToPath } from "node:url";
 import { fal } from "@fal-ai/client";
 import { render, RenderError } from "./render.js";
 import { createTo3d, isJobId } from "./to3d.js";
+import { openDb } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const PAGE = new URL("../public/sketch.html", import.meta.url);
 const MODELS_DIR = fileURLToPath(new URL("../models/", import.meta.url));
+const DATA_DIR = fileURLToPath(new URL("../data/", import.meta.url));
+// Pieces made before accounts existed were all made by the project's author.
+const LEGACY_AUTHOR = process.env.LEGACY_AUTHOR ?? "Linzhi";
 
 if (!process.env.FAL_KEY) {
   console.error("FAL_KEY is not set. Put it in server/.env.local.");
@@ -31,6 +38,8 @@ if (!process.env.FAL_KEY) {
 }
 fal.config({ credentials: process.env.FAL_KEY });
 mkdirSync(MODELS_DIR, { recursive: true });
+mkdirSync(DATA_DIR, { recursive: true });
+const db = openDb(`${DATA_DIR}sketchon.db`);
 
 async function run(model, input) {
   const result = await fal.run(model, { input });
@@ -48,30 +57,43 @@ const readInfo = (id) => {
   }
 };
 
-/** Every finished piece, newest first. There are no accounts yet, so this is everyone's work. */
-function library() {
-  return readdirSync(MODELS_DIR)
-    .filter((f) => f.endsWith(".glb"))
-    .map((f) => f.slice(0, -4))
-    .filter(isJobId)
-    .map((id) => ({
-      id,
-      name: readInfo(id).name ?? null,
-      material: readInfo(id).material ?? null,
-      modelUrl: `/models/${id}.glb`,
-      pictureUrl: existsSync(picturePath(id)) ? `/models/${id}.jpg` : null,
-      createdAt: statSync(modelPath(id)).mtimeMs,
-    }))
-    .sort((a, b) => b.createdAt - a.createdAt);
+// Pieces from before accounts kept their name and material in a .json file beside the model.
+for (const file of readdirSync(MODELS_DIR).filter((f) => f.endsWith(".glb"))) {
+  const id = file.slice(0, -4);
+  if (isJobId(id) && db.importLegacy(id, readInfo(id), LEGACY_AUTHOR)) {
+    console.log(`imported ${id} (${readInfo(id).name ?? "unnamed"}) as made by ${LEGACY_AUTHOR}`);
+  }
 }
+
+/** Every finished piece, newest first, with its maker. */
+function library() {
+  return db
+    .pieces()
+    .filter((p) => isJobId(p.id) && existsSync(modelPath(p.id)))
+    .map((p) => ({
+      ...p,
+      modelUrl: `/models/${p.id}.glb`,
+      pictureUrl: existsSync(picturePath(p.id)) ? `/models/${p.id}.jpg` : null,
+    }));
+}
+
+/** The signed-in user, or a 401. */
+function userOf(req) {
+  const header = req.headers.authorization ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const user = db.userForToken(token);
+  if (!user) throw new RenderError(401, "Please log in.");
+  return { user, token };
+}
+
 const to3d = createTo3d({
   fal,
   store: {
     has: (id) => existsSync(modelPath(id)),
     save: (id, bytes) => writeFileSync(modelPath(id), bytes),
     savePicture: (id, bytes) => writeFileSync(picturePath(id), bytes),
-    saveInfo: (id, info) => writeFileSync(infoPath(id), JSON.stringify(info)),
-    renameInfo: (id, name) => writeFileSync(infoPath(id), JSON.stringify({ ...readInfo(id), name })),
+    saveInfo: (id, info) => db.addPiece({ id, ...info }),
+    renameInfo: (id, name, user) => db.renamePiece(id, name, user),
     urlFor: (id) => `/models/${id}.glb`,
   },
   download: async (url) => {
@@ -117,19 +139,34 @@ async function route(req, res) {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(await readFile(PAGE));
   }
+  if (req.method === "POST" && (url === "/api/signup" || url === "/api/login")) {
+    const { name, password } = await readJson(req);
+    const session = url === "/api/signup" ? db.signUp(name, password) : db.logIn(name, password);
+    console.log(`${url === "/api/signup" ? "signed up" : "logged in"}: ${session.user.name}`);
+    return send(res, 200, session);
+  }
+  if (req.method === "POST" && url === "/api/logout") {
+    const header = req.headers.authorization ?? "";
+    db.logOut(header.startsWith("Bearer ") ? header.slice(7) : "");
+    return send(res, 200, { ok: true });
+  }
+  if (req.method === "GET" && url === "/api/me") return send(res, 200, { user: userOf(req).user });
   if (req.method === "POST" && url === "/api/render") {
+    userOf(req);
     return send(res, 200, await render(await readJson(req), run));
   }
   if (req.method === "POST" && url === "/api/to3d") {
+    const { user } = userOf(req);
     const { image, name, material } = await readJson(req);
-    const job = await to3d.start(image, name, material);
-    console.log(`3D job started: ${job.jobId}`);
+    const job = await to3d.start(image, name, material, user);
+    console.log(`3D job started: ${job.jobId} by ${user.name}`);
     return send(res, 200, job);
   }
   const naming = url.match(/^\/api\/jobs\/([^/]+)\/name$/);
   if (req.method === "POST" && naming) {
+    const { user } = userOf(req);
     const { name } = await readJson(req);
-    return send(res, 200, to3d.rename(naming[1], name));
+    return send(res, 200, to3d.rename(naming[1], name, user));
   }
   const job = url.match(/^\/api\/jobs\/([^/]+)$/);
   if (req.method === "GET" && job) {

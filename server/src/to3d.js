@@ -38,7 +38,7 @@ export function isJobId(id) {
  * `pose(glb)` puts the ring in the app's standard pose (ringfit.js); tests may replace it.
  */
 export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }) {
-  async function start(image, name, material) {
+  async function start(image, name, material, user) {
     if (typeof image !== "string") throw new RenderError(400, "image is required");
     const title = typeof name === "string" ? name.trim().slice(0, MAX_NAME) : "";
     let url = image;
@@ -56,7 +56,7 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
     // The render becomes the piece's picture in the gallery.
     if (picture) store.savePicture?.(jobId, picture);
     const made = typeof material === "string" && MATERIAL_ID.test(material) ? material : null;
-    store.saveInfo?.(jobId, { name: title || null, material: made, createdAt: Date.now() });
+    store.saveInfo?.(jobId, { name: title || null, material: made, createdAt: Date.now(), user });
     return { jobId };
   }
 
@@ -88,11 +88,11 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
   }
 
   /** Names a piece after its job started, so the user can name it while it is made. */
-  function rename(jobId, name) {
+  function rename(jobId, name, user) {
     if (!isJobId(jobId)) throw new RenderError(400, "bad job id");
     const title = typeof name === "string" ? name.trim().slice(0, MAX_NAME) : "";
     if (!title) throw new RenderError(400, "name is required");
-    store.renameInfo?.(jobId, title);
+    store.renameInfo?.(jobId, title, user);
     return { jobId, name: title };
   }
 

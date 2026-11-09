@@ -6,7 +6,8 @@ The project grew from a single smart ring into **SketchOn**: sketch a ring, watc
 
 ### New
 
-- **Home and Gallery.** The app opens on *Draw a ring* and *Gallery*. The Gallery holds the Gemtronic ring and every piece made so far, each with its name and the render it was made from.
+- **Accounts.** Log in or sign up with a name and password; the login is remembered. Drawing and making 3D need an account; anyone can browse the Gallery. The server keeps users, logins and pieces in SQLite; passwords are stored only as salted scrypt hashes and logins as hashed random tokens that last 90 days.
+- **Home and Gallery.** The app opens on *Draw a ring* and *Gallery*. The Gallery holds the Gemtronic ring and every piece made so far, each with its name, its maker and the render it was made from.
 - **Drawing panel with a live render.** Draw on the left; FLUX.2 Klein renders the drawing on the right while you draw (about 0.8 s per image on fal).
 - **Material, style and view as separate choices.** Material: clay, resin, or metal (gold, silver, rose gold, platinum). Style: refined, cute cartoon, vintage, minimal, bold. View: band shape, top & stone, side profile. Each view shows a small 3D picture of which part of the ring it shapes, and a grey band guide on the canvas.
 - **Drawing help.** *Smooth* removes wobble from dense strokes. *Snap shapes* turns a stroke that goes nearly all the way round into a true circle, and closes strokes whose ends nearly meet.
@@ -25,8 +26,8 @@ The project grew from a single smart ring into **SketchOn**: sketch a ring, watc
 ### Architecture
 
 - `app/`: PICO Spatial app (Kotlin, Compose, Spatial SDK 6.1.9). State in `RingWearViewModel`; drawing help in `ShapeStrokeUseCase`; server client in `data/remote/SketchOnServer.kt`.
-- `server/`: Node render server. Keeps the fal key off the headset. `/api/render` (live render), `/api/to3d` and `/api/jobs/ID` (Tripo job), `/api/jobs/ID/name`, `/api/library`. `ringfit.js` poses models; `parts.js` splits them into band and decoration.
-- Tests: 44 app unit tests and 22 server tests. Paid APIs are never called in tests.
+- `server/`: Node render server. Keeps the fal key off the headset. `/api/signup`, `/api/login`, `/api/logout`, `/api/me`; `/api/render` (live render), `/api/to3d` and `/api/jobs/ID` (Tripo job), `/api/jobs/ID/name`, `/api/library`. `db.js` holds accounts and pieces (SQLite in `server/data/`); `ringfit.js` poses models; `parts.js` splits them into band and decoration.
+- Tests: 48 app unit tests and 29 server tests. Paid APIs are never called in tests.
 
 ### Known limitations
 
@@ -35,7 +36,7 @@ The project grew from a single smart ring into **SketchOn**: sketch a ring, watc
 - Drawing on the emulator is coarse, since it sends very few points per drag.
 - The ring takes one colour. Colouring the band and the decoration separately, and brush painting on the 3D ring, are planned for V4.
 - The band still draws over the finger (no occlusion), and rings are shown at 3x for the emulator's arm's-length view.
-- The Gallery is one shared list on the server; there are no accounts yet.
+- The app talks to the server over plain HTTP, so passwords cross the local network unencrypted. Fine for a demo; HTTPS is needed before real use.
 
 ## V2 (2.0) — 2026-11-01
 

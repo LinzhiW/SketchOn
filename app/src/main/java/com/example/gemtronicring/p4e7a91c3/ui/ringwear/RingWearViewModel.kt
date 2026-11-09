@@ -2,7 +2,10 @@ package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.gemtronicring.p4e7a91c3.data.local.SessionStore
 import com.example.gemtronicring.p4e7a91c3.data.remote.JobStatus
+import com.example.gemtronicring.p4e7a91c3.data.remote.NotLoggedInException
+import com.example.gemtronicring.p4e7a91c3.data.remote.Session
 import com.example.gemtronicring.p4e7a91c3.data.remote.SketchOnServer
 import com.example.gemtronicring.p4e7a91c3.domain.model.MenuCursor
 import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
@@ -31,6 +34,7 @@ class RingWearViewModel(
     private val navigate: NavigateMenuUseCase,
     private val server: SketchOnServer,
     private val modelsDir: File,
+    private val sessions: SessionStore,
     private val pollIntervalMs: Long = POLL_INTERVAL_MS,
 ) : ViewModel() {
     private var cursor = MenuCursor(menu.root)
@@ -53,8 +57,36 @@ class RingWearViewModel(
     private var madePiece: Pair<RingPiece, Boolean>? = null
     private var named = false
 
+    init {
+        val saved = sessions.load()
+        if (saved == null) {
+            _state.update { it.copy(phase = RingPhase.Login) }
+        } else {
+            server.token = saved.token
+            _state.update { it.copy(user = saved.name) }
+            // Check the saved login is still good; keep it if the server cannot be reached.
+            viewModelScope.launch {
+                try {
+                    server.me()
+                } catch (e: NotLoggedInException) {
+                    signedOut(e.message)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
     fun onEvent(event: RingWearEvent) {
         when (event) {
+            is RingWearEvent.LogIn -> authenticate { server.logIn(event.name, event.password) }
+            is RingWearEvent.SignUp -> authenticate { server.signUp(event.name, event.password) }
+            RingWearEvent.LogOut -> {
+                viewModelScope.launch { runCatching { server.logOut() } }
+                signedOut(null)
+            }
+            RingWearEvent.OpenLogin -> _state.update { it.copy(phase = RingPhase.Login, login = LoginUiState()) }
             RingWearEvent.StartSketch -> {
                 seed = Random.nextInt(0, Int.MAX_VALUE)
                 _state.update { it.copy(phase = RingPhase.Sketching) }
@@ -175,6 +207,31 @@ class RingWearViewModel(
         return File(modelsDir, "$id.v2.glb")
     }
 
+    private fun authenticate(call: suspend () -> Session) {
+        if (_state.value.login.busy) return
+        _state.update { it.copy(login = LoginUiState(busy = true)) }
+        viewModelScope.launch {
+            try {
+                val session = call()
+                server.token = session.token
+                sessions.save(session)
+                _state.update { it.copy(user = session.name, login = LoginUiState(), phase = RingPhase.Home) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(login = LoginUiState(error = reasonOf(e))) }
+            }
+        }
+    }
+
+    /** Forgets the login and shows the login panel, with [reason] if there is one. */
+    private fun signedOut(reason: String?) {
+        server.token = null
+        sessions.clear()
+        making3d?.cancel()
+        _state.update { it.copy(user = null, phase = RingPhase.Login, login = LoginUiState(error = reason)) }
+    }
+
     private fun onSketchChanged(sketch: String?) {
         latestSketch = sketch
         if (sketch == null) {
@@ -227,6 +284,8 @@ class RingWearViewModel(
             }
         } catch (e: CancellationException) {
             throw e
+        } catch (e: NotLoggedInException) {
+            signedOut(e.message)
         } catch (e: Exception) {
             _state.update { it.copy(sketch = it.sketch.copy(error = reasonOf(e))) }
         } finally {
@@ -274,6 +333,8 @@ class RingWearViewModel(
                     }
                 } catch (e: CancellationException) {
                     throw e
+                } catch (e: NotLoggedInException) {
+                    signedOut(e.message)
                 } catch (e: Exception) {
                     fail3d(reasonOf(e))
                 }

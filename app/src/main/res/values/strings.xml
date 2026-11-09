@@ -97,4 +97,16 @@
     <string name="painting_down">Down</string>
     <string name="painting_parts_soon">Colouring the band and the decoration separately: coming soon.</string>
     <string name="painting_drag">Drag the ring itself to turn it, or use the buttons.</string>
+    <string name="login_body">Log in to draw rings and share them. Anyone can browse the Gallery. New here? Choose a name and a password of 6 or more characters, then Sign up.</string>
+    <string name="login_name">Name</string>
+    <string name="login_password">Password</string>
+    <string name="login_log_in">Log in</string>
+    <string name="login_sign_up">Sign up</string>
+    <string name="login_busy">One moment…</string>
+    <string name="login_browse">Just browse the Gallery</string>
+    <string name="home_signed_in">Signed in as %1$s</string>
+    <string name="home_log_out">Log out</string>
+    <string name="home_log_in_to_draw">Log in to draw</string>
+    <string name="gallery_by">by %1$s</string>
+    <string name="gallery_by_unknown">by an unknown maker</string>
 </resources>

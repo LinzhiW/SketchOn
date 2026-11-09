@@ -49,6 +49,8 @@ enum class SketchView(val id: String) {
 data class GalleryPiece(
     val id: String,
     val name: String?,
+    /** Who made it; null for none recorded. */
+    val author: String?,
     /** The material id it was made in (see [Material]), or null for older pieces. */
     val material: String?,
     val modelUrl: String,

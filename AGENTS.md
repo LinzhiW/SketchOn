@@ -68,6 +68,11 @@ npm --prefix server test
 - The app reaches the server at `BuildConfig.SERVER_URL` (10.0.2.2:8787 on the emulator).
 - Ring screens and icons are plain files in this repo. They were once Git LFS pointers by mistake, which made textures fail with "Unable to decode texture". Do not add LFS rules for them.
 
+## Accounts
+
+- `server/src/db.js` (node:sqlite, `server/data/sketchon.db`): users (scrypt hash + salt), tokens (SHA-256 of a random token, 90 days), pieces (id, user, author name, name, material). `/api/render`, `/api/to3d` and `/api/jobs/ID/name` need `Authorization: Bearer`. Only a piece's maker may name it.
+- The app keeps the session in private SharedPreferences (`PreferencesSessionStore`); a 401 (`NotLoggedInException`) sends the user to the Login panel. Login travels over plain HTTP: demo only.
+
 ## Build and run
 
 ```bash

@@ -10,7 +10,8 @@ SketchOn is a [PICO](https://developer.picoxr.com/) Spatial app. It is an early 
 2. **Make it 3D.** The render becomes a 3D model with Tripo (1 to 2 minutes). You name the piece while it is made, and it is shared in the Gallery.
 3. **Colour it.** Clay and resin rings come out white. Turn the ring in front of you by dragging it, and pick its colour.
 4. **Wear it.** Choose a finger and raise your hand; the ring follows that finger. The server finds the ring's hole in the mesh and poses every model so it sits on the finger the right way up.
-5. **Gallery.** Try on the Gemtronic smart ring, with its real screens and gestures, or any piece made so far.
+5. **Gallery.** Try on the Gemtronic smart ring, with its real screens and gestures, or any piece made so far, with who made it.
+6. **Accounts.** Sign up with a name and password to draw and share; anyone can browse the Gallery.
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each version and the known limitations.
 
@@ -55,6 +56,8 @@ npm start
 ```
 
 The app reaches the server at `http://10.0.2.2:8787`, which is your computer as seen from the PICO emulator. For a headset, build with `./gradlew assembleDebug -PsketchonServer=http://<your computer's LAN address>:8787`. You can also open http://localhost:8787 on the computer to try the live render in a browser. The key stays on the server and is never sent to the browser or the headset. `.env.local` is ignored by git; never commit it.
+
+Accounts and pieces are kept in `server/data/sketchon.db` (SQLite, ignored by git). Pieces made before accounts existed are credited to `LEGACY_AUTHOR` (default `Linzhi`). The browser test page needs a login token in its `localStorage` under `sketchonToken`.
 
 ## License
 

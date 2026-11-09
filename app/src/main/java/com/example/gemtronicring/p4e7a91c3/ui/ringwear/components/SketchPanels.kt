@@ -52,6 +52,8 @@ import com.example.gemtronicring.p4e7a91c3.domain.model.SketchView
 import com.example.gemtronicring.p4e7a91c3.domain.model.StrokePoint
 import com.example.gemtronicring.p4e7a91c3.domain.usecase.ShapeStrokeUseCase
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.GalleryUiState
+import com.example.gemtronicring.p4e7a91c3.ui.ringwear.LoginUiState
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearViewModel
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.SketchUiState
@@ -63,6 +65,7 @@ import com.pico.spatial.ui.design.ButtonDefaults
 import com.pico.spatial.ui.design.PicoTheme
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.design.TextField
+import com.pico.spatial.ui.design.TextFieldDefaults
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -89,11 +92,59 @@ private const val GUIDE_WIDTH_PX = 3f
 private const val GUIDE_GREY = 0xFFC8C8C8.toInt()
 private const val GALLERY_COLUMNS = 3
 private const val NAME_LIMIT = 40
+/** The Gemtronic ring is the project author's own design. */
+private const val GEMTRONIC_AUTHOR = "Linzhi"
 private const val WHITE = 0xFFFFFFFF.toInt()
+
+/** Log in or sign up. The gallery stays open to everyone. */
+@Composable
+internal fun LoginPanel(login: LoginUiState, onEvent: (RingWearEvent) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    val ready = name.isNotBlank() && password.isNotEmpty() && !login.busy
+    Column(
+        verticalArrangement = Arrangement.spacedBy(Gap),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(440.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
+    ) {
+        Title(stringResource(R.string.app_name))
+        Body(stringResource(R.string.login_body))
+        TextField(
+            value = name,
+            onValueChange = { name = it.take(20) },
+            singleLine = true,
+            colors = fieldColors(),
+            placeholder = { Text(stringResource(R.string.login_name)) },
+        )
+        TextField(
+            value = password,
+            onValueChange = { password = it.take(100) },
+            singleLine = true,
+            colors = fieldColors(),
+            visualTransformation = PasswordVisualTransformation(),
+            placeholder = { Text(stringResource(R.string.login_password)) },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
+            Button(onClick = { onEvent(RingWearEvent.LogIn(name, password)) }, enabled = ready, colors = lightButtonColors()) {
+                Text(stringResource(R.string.login_log_in))
+            }
+            Button(onClick = { onEvent(RingWearEvent.SignUp(name, password)) }, enabled = ready, colors = darkButtonColors()) {
+                Text(stringResource(R.string.login_sign_up))
+            }
+        }
+        when {
+            login.busy -> Body(stringResource(R.string.login_busy))
+            login.error != null -> Body(login.error)
+        }
+        Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = darkButtonColors()) {
+            Text(stringResource(R.string.login_browse))
+        }
+    }
+}
 
 /** First panel: draw a ring, or browse what has been made. */
 @Composable
-internal fun HomePanel(onEvent: (RingWearEvent) -> Unit) {
+internal fun HomePanel(user: String?, onEvent: (RingWearEvent) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -101,11 +152,25 @@ internal fun HomePanel(onEvent: (RingWearEvent) -> Unit) {
     ) {
         Title(stringResource(R.string.app_name))
         Body(stringResource(R.string.home_subtitle))
-        Button(onClick = { onEvent(RingWearEvent.StartSketch) }, colors = lightButtonColors()) {
-            Text(stringResource(R.string.home_draw))
+        if (user != null) {
+            Button(onClick = { onEvent(RingWearEvent.StartSketch) }, colors = lightButtonColors()) {
+                Text(stringResource(R.string.home_draw))
+            }
         }
         Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.home_gallery))
+        }
+        if (user != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
+                Label(stringResource(R.string.home_signed_in, user))
+                Button(onClick = { onEvent(RingWearEvent.LogOut) }, colors = darkButtonColors()) {
+                    Text(stringResource(R.string.home_log_out))
+                }
+            }
+        } else {
+            Button(onClick = { onEvent(RingWearEvent.OpenLogin) }, colors = darkButtonColors()) {
+                Text(stringResource(R.string.home_log_in_to_draw))
+            }
         }
     }
 }
@@ -120,11 +185,17 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
             }
             .getOrNull()
     }
-    data class Card(val key: String, val label: String, val picture: ImageBitmap?, val onClick: () -> Unit)
+    data class Card(
+        val key: String,
+        val label: String,
+        val author: String?,
+        val picture: ImageBitmap?,
+        val onClick: () -> Unit,
+    )
 
     val cards =
         listOf(
-            Card("gemtronic", stringResource(R.string.gallery_gemtronic), gemtronicPicture) {
+            Card("gemtronic", stringResource(R.string.gallery_gemtronic), GEMTRONIC_AUTHOR, gemtronicPicture) {
                 onEvent(RingWearEvent.ChooseGemtronic)
             }
         ) +
@@ -132,7 +203,7 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
                 val bytes = gallery.pictures[piece.id]
                 val picture = remember(bytes) { bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() } }
                 val label = piece.name ?: stringResource(R.string.gallery_piece, gallery.pieces.size - i)
-                Card(piece.id, label, picture) {
+                Card(piece.id, label, piece.author, picture) {
                     onEvent(RingWearEvent.WearPiece(piece))
                 }
             }
@@ -157,6 +228,10 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
                                 Body(stringResource(R.string.gallery_no_picture))
                             }
                         }
+                        Label(
+                            if (card.author != null) stringResource(R.string.gallery_by, card.author)
+                            else stringResource(R.string.gallery_by_unknown)
+                        )
                         Button(
                             onClick = card.onClick,
                             enabled = gallery.opening == null,
@@ -456,6 +531,7 @@ internal fun NamingPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 value = name,
                 onValueChange = { name = it.take(NAME_LIMIT) },
                 singleLine = true,
+            colors = fieldColors(),
                 placeholder = { Text(stringResource(R.string.naming_placeholder)) },
             )
         }
@@ -619,6 +695,16 @@ private fun lightButtonColors() =
     ButtonDefaults.buttonColors(
         containerColor = PicoTheme.colorScheme.labelPrimaryLight,
         contentColor = GemtronicColors.ringScreenBase,
+    )
+
+/** Light text on a lighter box, so fields read on the dark panels. */
+@Composable
+private fun fieldColors() =
+    TextFieldDefaults.textFieldColors(
+        textColor = PicoTheme.colorScheme.labelPrimaryLight,
+        backgroundColor = Color(0xFF3A403C),
+        focusedColor = PicoTheme.colorScheme.labelPrimaryLight,
+        placeholderColor = Color(0xFFB8BDB9),
     )
 
 @Composable

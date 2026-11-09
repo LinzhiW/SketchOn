@@ -9,8 +9,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+/** The server answered 401: the user must log in (again). */
+class NotLoggedInException(message: String) : IOException(message)
+
+/** A signed-in user and the token that proves it. */
+data class Session(val token: String, val name: String)
+
 /** The render server in SketchOn/server. The fal key stays there; the app never sees it. */
 interface SketchOnServer {
+    /** Sent with every request once the user has logged in. */
+    var token: String?
+
+    suspend fun signUp(name: String, password: String): Session
+
+    suspend fun logIn(name: String, password: String): Session
+
+    suspend fun logOut()
+
+    /** The signed-in user's name; throws [NotLoggedInException] if the token is not valid. */
+    suspend fun me(): String
+
     /** Returns the render as a data URI. The other arguments are the server's ids. */
     suspend fun render(
         sketchDataUri: String,
@@ -47,6 +65,24 @@ sealed interface JobStatus {
 }
 
 class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
+    @Volatile override var token: String? = null
+
+    override suspend fun signUp(name: String, password: String) = session("/api/signup", name, password)
+
+    override suspend fun logIn(name: String, password: String) = session("/api/login", name, password)
+
+    private suspend fun session(path: String, name: String, password: String): Session {
+        val json = post(path, JSONObject().put("name", name).put("password", password), POLL_TIMEOUT_MS)
+        return Session(json.getString("token"), json.getJSONObject("user").getString("name"))
+    }
+
+    override suspend fun logOut() {
+        runCatching { post("/api/logout", JSONObject(), POLL_TIMEOUT_MS) }
+        token = null
+    }
+
+    override suspend fun me(): String = get("/api/me").getJSONObject("user").getString("name")
+
     override suspend fun render(
         sketchDataUri: String,
         material: String,
@@ -80,6 +116,7 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
             GalleryPiece(
                 id = p.getString("id"),
                 name = if (p.isNull("name")) null else p.optString("name").ifBlank { null },
+                author = if (p.isNull("author")) null else p.optString("author").ifBlank { null },
                 material = if (p.isNull("material")) null else p.optString("material").ifBlank { null },
                 modelUrl = p.getString("modelUrl"),
                 pictureUrl = if (p.isNull("pictureUrl")) null else p.getString("pictureUrl"),
@@ -158,6 +195,8 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
             .apply {
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = timeoutMs
+                // Only to our own server: model and picture URLs are relative to it.
+                token?.let { if (!path.startsWith("http")) setRequestProperty("Authorization", "Bearer $it") }
             }
 
     /** Turns a server error into an exception carrying the server's own reason. */
@@ -170,7 +209,9 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
                         .optString("error")
                 }
                 .getOrNull()
-        throw IOException(reason?.takeIf { it.isNotBlank() } ?: "server error $code")
+        val message = reason?.takeIf { it.isNotBlank() } ?: "server error $code"
+        if (code == 401 && message != "Wrong name or password.") throw NotLoggedInException(message)
+        throw IOException(message)
     }
 
     private companion object {

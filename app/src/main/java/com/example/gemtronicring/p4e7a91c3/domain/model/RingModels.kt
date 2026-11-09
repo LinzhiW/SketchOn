@@ -1,6 +1,8 @@
 package com.example.gemtronicring.p4e7a91c3.domain.model
 
 enum class RingPhase {
+    /** Log in or sign up. Drawing and making 3D need an account; the gallery does not. */
+    Login,
     /** Choose: draw a ring, or browse the gallery. */
     Home,
     /** Pieces to try on: the Gemtronic ring and everything made so far. */
