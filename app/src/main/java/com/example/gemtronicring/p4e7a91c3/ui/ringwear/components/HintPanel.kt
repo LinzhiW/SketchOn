@@ -45,6 +45,7 @@ internal fun CenterPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Uni
         RingPhase.Home -> HomePanel(onEvent)
         RingPhase.Gallery -> GalleryPanel(state.gallery, onEvent)
         RingPhase.Sketching -> SketchPanel(state.sketch, onEvent)
+        RingPhase.Naming -> NamingPanel(state.sketch, onEvent)
         RingPhase.Making3D -> Making3dPanel(state.sketch, onEvent)
         RingPhase.FingerChoosing -> FingerPanel(state, onEvent)
         RingPhase.HandSearching -> HandHint()

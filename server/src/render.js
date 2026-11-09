@@ -14,13 +14,25 @@
 // The headset sends ids, never free text, so the prompt stays a ring render.
 // Material is what the ring is made of; style is how it is designed; view is which side the
 // drawing shows. They are chosen separately and combined here.
+// Clay and resin take a colour ("{color}" below); metals have their own.
 export const MATERIALS = {
   gold: "polished yellow gold",
   silver: "brushed sterling silver",
   rose: "rose gold",
   platinum: "platinum",
-  clay: "matte hand-shaped polymer clay in soft colours",
-  resin: "glossy translucent coloured resin",
+  clay: "matte hand-shaped polymer clay in {color}",
+  resin: "glossy translucent {color} resin",
+};
+
+export const COLORS = {
+  pink: "pastel pink",
+  mint: "mint green",
+  sky: "sky blue",
+  lemon: "lemon yellow",
+  lilac: "lilac purple",
+  cream: "cream white",
+  red: "cherry red",
+  black: "deep black",
 };
 
 export const STYLES = {
@@ -31,10 +43,13 @@ export const STYLES = {
   bold: "bold sculptural statement design",
 };
 
+// "front" looks through the ring's hole (also what a ring lying flat looks like from above);
+// "top" looks down at the stone, as on a hand; "side" shows the band's profile.
 export const VIEWS = {
-  front: "seen from the front, looking through the ring's hole",
-  side: "seen from the side, showing the band's profile",
-  top: "seen from above, looking down on the top of the ring",
+  front:
+    "upright, seen looking straight through the ring's hole; the drawing defines the band's outline, with any stone on top",
+  top: "seen from above, looking down at the top of the ring; the drawing defines the stone and what sits on top of the band",
+  side: "seen from the side; the drawing defines the band's thickness and how high the stone sits",
 };
 
 const MAX_SKETCH_BYTES = 2 * 1024 * 1024;
@@ -91,7 +106,7 @@ function pick(table, id, name, fallback) {
   return words;
 }
 
-export function buildInput({ sketch, material, style, view, engine = "klein", seed }) {
+export function buildInput({ sketch, material, color, style, view, engine = "klein", seed }) {
   if (typeof sketch !== "string" || !SKETCH_PREFIX.test(sketch)) {
     throw new RenderError(400, "sketch must be a base64 PNG, JPEG or WebP data URI");
   }
@@ -99,7 +114,10 @@ export function buildInput({ sketch, material, style, view, engine = "klein", se
     throw new RenderError(413, "sketch is too large");
   }
   const words = {
-    material: pick(MATERIALS, material, "material", "gold"),
+    material: pick(MATERIALS, material, "material", "gold").replace(
+      "{color}",
+      pick(COLORS, color, "color", "pink"),
+    ),
     style: pick(STYLES, style, "style", "refined"),
     view: pick(VIEWS, view, "view", "front"),
   };

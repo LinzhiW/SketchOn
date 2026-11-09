@@ -7,6 +7,8 @@ enum class RingPhase {
     Gallery,
     /** Drawing, with a live AI render beside the drawing. */
     Sketching,
+    /** Naming the piece before it is made into 3D and shared in the gallery. */
+    Naming,
     /** Waiting while the chosen render becomes a 3D model. */
     Making3D,
     FingerChoosing,

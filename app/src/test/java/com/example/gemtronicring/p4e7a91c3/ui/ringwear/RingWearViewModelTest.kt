@@ -38,6 +38,7 @@ private class FakeServer : SketchOnServer {
     override suspend fun render(
         sketchDataUri: String,
         material: String,
+        color: String,
         style: String,
         view: String,
         seed: Int,
@@ -47,11 +48,19 @@ private class FakeServer : SketchOnServer {
     }
 
     override suspend fun library() =
-        listOf(GalleryPiece("piece-2", "/models/piece-2.glb", "/models/piece-2.jpg"), GalleryPiece("piece-1", "/models/piece-1.glb", null))
+        listOf(
+            GalleryPiece("piece-2", "Cloud Ring", "/models/piece-2.glb", "/models/piece-2.jpg"),
+            GalleryPiece("piece-1", null, "/models/piece-1.glb", null),
+        )
 
     override suspend fun bytes(url: String) = url.toByteArray()
 
-    override suspend fun start3d(imageDataUri: String) = "job-1"
+    val names = mutableListOf<String>()
+
+    override suspend fun start3d(imageDataUri: String, name: String): String {
+        names += name
+        return "job-1"
+    }
 
     override suspend fun job(jobId: String): JobStatus =
         if (++jobPolls < 2) JobStatus.Running else JobStatus.Done("/models/job-1.glb")
@@ -166,12 +175,27 @@ class RingWearViewModelTest {
         viewModel.onEvent(RingWearEvent.SketchChanged("a"))
         advanceUntilIdle()
         viewModel.onEvent(RingWearEvent.Make3d)
+        assertEquals(RingPhase.Naming, viewModel.state.value.phase)
+        viewModel.onEvent(RingWearEvent.ConfirmMake3d("  Cloud Ring "))
         assertEquals(RingPhase.Making3D, viewModel.state.value.phase)
         advanceUntilIdle()
         val state = viewModel.state.value
         assertEquals(RingPhase.FingerChoosing, state.phase)
         val piece = state.piece as RingPiece.Generated
         assertTrue(File(piece.path).exists())
+        assertEquals(listOf("Cloud Ring"), server.names)
+    }
+
+    @Test
+    fun `naming can go back to drawing without making anything`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.StartSketch)
+        viewModel.onEvent(RingWearEvent.SketchChanged("a"))
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.Make3d)
+        viewModel.onEvent(RingWearEvent.Cancel3d)
+        advanceUntilIdle()
+        assertEquals(RingPhase.Sketching, viewModel.state.value.phase)
+        assertTrue(server.names.isEmpty())
     }
 
     @Test

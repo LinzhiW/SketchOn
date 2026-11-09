@@ -6,6 +6,7 @@ The following files are **not** covered by that license:
 
 - `app/src/main/assets/ring.glb`: the 3D model of the Gemtronic ring
 - `app/src/main/assets/pages/*.png`: the 25 Gemtronic ring screen images
+- `app/src/main/assets/gallery/gemtronic.jpg`: the Gemtronic ring picture in the gallery
 
 They are part of the Gemtronic ring, an original product design by Linzhi Wang.
 

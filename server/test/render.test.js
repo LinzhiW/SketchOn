@@ -33,11 +33,17 @@ test("rejects a material, style or view that is not on the list", () => {
   assert.throws(() => buildInput({ sketch: SKETCH, view: "back" }), RenderError);
 });
 
+test("puts the chosen colour into clay and resin, and leaves metals alone", () => {
+  assert.match(buildInput({ sketch: SKETCH, material: "resin", color: "mint" }).prompt, /translucent mint green resin/);
+  assert.doesNotMatch(buildInput({ sketch: SKETCH, material: "gold", color: "mint" }).prompt, /mint/);
+  assert.throws(() => buildInput({ sketch: SKETCH, material: "clay", color: "plaid" }), RenderError);
+});
+
 test("combines material, style and view in the prompt", () => {
   const { prompt } = buildInput({ sketch: SKETCH, material: "clay", style: "cute", view: "top" });
   assert.match(prompt, /polymer clay/);
   assert.match(prompt, /cartoon/);
-  assert.match(prompt, /from above/);
+  assert.match(prompt, /looking down at the top/);
 });
 
 test("rejects an unknown engine and a bad seed", () => {

@@ -8,6 +8,7 @@ const IMAGE = "data:image/jpeg;base64,/9j/4AAQ";
 function fakes({ status = "COMPLETED", data = { model_mesh: { url: "https://fal.media/m.glb" } } } = {}) {
   const calls = { uploads: 0, submits: [], downloads: [] };
   const saved = new Map();
+  const info = new Map();
   const fal = {
     storage: { upload: async () => (calls.uploads++, "https://fal.media/in.jpg") },
     queue: {
@@ -20,9 +21,10 @@ function fakes({ status = "COMPLETED", data = { model_mesh: { url: "https://fal.
     has: (id) => saved.has(id),
     save: (id, bytes) => saved.set(id, bytes),
     urlFor: (id) => `/models/${id}.glb`,
+    saveInfo: (id, value) => info.set(id, value),
   };
   const download = async (url) => (calls.downloads.push(url), Buffer.from("glb"));
-  return { to3d: createTo3d({ fal, store, download, pose: (glb) => ({ glb, pose: { holeAxis: "z", holeFound: true } }) }), calls, saved };
+  return { to3d: createTo3d({ fal, store, download, pose: (glb) => ({ glb, pose: { holeAxis: "z", holeFound: true } }) }), calls, saved, info };
 }
 
 test("start uploads a data URI and submits Tripo facing the drawing", async () => {
@@ -32,6 +34,13 @@ test("start uploads a data URI and submits Tripo facing the drawing", async () =
   assert.equal(calls.submits[0].model, TRIPO_MODEL);
   assert.equal(calls.submits[0].input.image_url, "https://fal.media/in.jpg");
   assert.equal(calls.submits[0].input.orientation, "align_image");
+});
+
+test("start keeps the piece's name, trimmed and capped", async () => {
+  const { to3d, info } = fakes();
+  await to3d.start(IMAGE, "  My cloud ring  " + "x".repeat(60));
+  assert.equal(info.get("job-12345678").name.startsWith("My cloud ring"), true);
+  assert.ok(info.get("job-12345678").name.length <= 40);
 });
 
 test("start rejects anything that is not an image", async () => {

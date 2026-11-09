@@ -65,13 +65,16 @@ class RingWearViewModel(
             }
             is RingWearEvent.SketchChanged -> onSketchChanged(event.sketchDataUri)
             is RingWearEvent.ChooseMaterial -> rerender { it.copy(material = event.material) }
+            is RingWearEvent.ChooseColor -> rerender { it.copy(color = event.color) }
             is RingWearEvent.ChooseStyle -> rerender { it.copy(style = event.style) }
             is RingWearEvent.ChooseView -> rerender { it.copy(view = event.view) }
             RingWearEvent.ToggleSmooth ->
                 _state.update { it.copy(sketch = it.sketch.copy(smooth = !it.sketch.smooth)) }
             RingWearEvent.ToggleShapes ->
                 _state.update { it.copy(sketch = it.sketch.copy(shapes = !it.sketch.shapes)) }
-            RingWearEvent.Make3d -> make3d()
+            RingWearEvent.Make3d ->
+                if (_state.value.sketch.render != null) _state.update { it.copy(phase = RingPhase.Naming) }
+            is RingWearEvent.ConfirmMake3d -> make3d(event.name)
             RingWearEvent.Cancel3d -> {
                 making3d?.cancel()
                 _state.update { it.copy(phase = RingPhase.Sketching) }
@@ -177,7 +180,14 @@ class RingWearViewModel(
         val started = System.currentTimeMillis()
         val options = _state.value.sketch
         try {
-            val image = server.render(sketch, options.material.id, options.style.id, options.view.id, seed)
+            val image = server.render(
+                    sketch,
+                    options.material.id,
+                    options.color.id,
+                    options.style.id,
+                    options.view.id,
+                    seed,
+                )
             // A cleared drawing should not get a late render back.
             if (latestSketch == null) return
             _state.update {
@@ -199,7 +209,7 @@ class RingWearViewModel(
         }
     }
 
-    private fun make3d() {
+    private fun make3d(name: String) {
         val render = _state.value.sketch.render ?: return
         making3d?.cancel()
         _state.update {
@@ -209,7 +219,7 @@ class RingWearViewModel(
             viewModelScope.launch {
                 val started = System.currentTimeMillis()
                 try {
-                    val jobId = server.start3d(render)
+                    val jobId = server.start3d(render, name.trim())
                     var status: JobStatus = JobStatus.Running
                     while (status == JobStatus.Running) {
                         delay(pollIntervalMs)

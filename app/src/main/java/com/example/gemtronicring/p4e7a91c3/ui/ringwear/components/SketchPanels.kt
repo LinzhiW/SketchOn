@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.example.gemtronicring.p4e7a91c3.R
 import com.example.gemtronicring.p4e7a91c3.domain.model.DesignStyle
 import com.example.gemtronicring.p4e7a91c3.domain.model.Material
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingColor
 import com.example.gemtronicring.p4e7a91c3.domain.model.SketchView
 import com.example.gemtronicring.p4e7a91c3.domain.model.StrokePoint
 import com.example.gemtronicring.p4e7a91c3.domain.usecase.ShapeStrokeUseCase
@@ -56,6 +58,7 @@ import com.pico.spatial.ui.design.Button
 import com.pico.spatial.ui.design.ButtonDefaults
 import com.pico.spatial.ui.design.PicoTheme
 import com.pico.spatial.ui.design.Text
+import com.pico.spatial.ui.design.TextField
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,6 +68,7 @@ private val PanelShape = RoundedCornerShape(24.dp)
 private val SquareShape = RoundedCornerShape(16.dp)
 private val SquareSize = 360.dp
 private val CardSize = 150.dp
+private val ViewPictureSize = 96.dp
 private val Gap = 16.dp
 private val SmallGap = 8.dp
 private val Pad = 24.dp
@@ -75,6 +79,7 @@ private const val PEN_WIDTH_PX = 6f
 private const val GUIDE_WIDTH_PX = 3f
 private const val GUIDE_GREY = 0xFFC8C8C8.toInt()
 private const val GALLERY_COLUMNS = 3
+private const val NAME_LIMIT = 40
 
 /** First panel: draw a ring, or browse what has been made. */
 @Composable
@@ -101,7 +106,7 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
     val context = LocalContext.current
     val gemtronicPicture = remember {
         runCatching {
-                context.assets.open("pages/idle.png").use { BitmapFactory.decodeStream(it).asImageBitmap() }
+                context.assets.open("gallery/gemtronic.jpg").use { BitmapFactory.decodeStream(it).asImageBitmap() }
             }
             .getOrNull()
     }
@@ -116,7 +121,8 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
             gallery.pieces.take(RingWearViewModel.GALLERY_SIZE).mapIndexed { i, piece ->
                 val bytes = gallery.pictures[piece.id]
                 val picture = remember(bytes) { bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() } }
-                Card(piece.id, stringResource(R.string.gallery_piece, gallery.pieces.size - i), picture) {
+                val label = piece.name ?: stringResource(R.string.gallery_piece, gallery.pieces.size - i)
+                Card(piece.id, label, picture) {
                     onEvent(RingWearEvent.WearPiece(piece))
                 }
             }
@@ -248,12 +254,26 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
         ChoiceRow(R.string.sketch_material, Material.entries, sketch.material, ::materialLabel) {
             onEvent(RingWearEvent.ChooseMaterial(it))
         }
+        if (!sketch.material.metal) {
+            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+                Label(stringResource(R.string.sketch_color))
+                RingColor.entries.forEach { colour ->
+                    val swatch = Color(colour.argb)
+                    val ink = if (swatch.luminance() > 0.5f) Color.Black else Color.White
+                    Button(
+                        onClick = { onEvent(RingWearEvent.ChooseColor(colour)) },
+                        colors = ButtonDefaults.buttonColors(containerColor = swatch, contentColor = ink),
+                    ) {
+                        // A tick marks the chosen colour; the swatch itself is the label.
+                        Text(if (colour == sketch.color) "✓" else " ")
+                    }
+                }
+            }
+        }
         ChoiceRow(R.string.sketch_style, DesignStyle.entries, sketch.style, ::styleLabel) {
             onEvent(RingWearEvent.ChooseStyle(it))
         }
-        ChoiceRow(R.string.sketch_view, SketchView.entries, sketch.view, ::viewLabel) {
-            onEvent(RingWearEvent.ChooseView(it))
-        }
+        ViewPicker(sketch.view) { onEvent(RingWearEvent.ChooseView(it)) }
         Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
             Label(stringResource(R.string.sketch_help))
             Toggle(R.string.sketch_smooth, sketch.smooth) { onEvent(RingWearEvent.ToggleSmooth) }
@@ -311,6 +331,50 @@ private fun <T> ChoiceRow(labelRes: Int, items: List<T>, chosen: T, label: (T) -
     }
 }
 
+/**
+ * The three views as pictures of a ring: gold marks the part of the ring a drawing in that
+ * view shapes, and the arrow shows where the drawing is seen from.
+ */
+@Composable
+private fun ViewPicker(chosen: SketchView, onPick: (SketchView) -> Unit) {
+    val context = LocalContext.current
+    val pictures = remember {
+        SketchView.entries.associateWith { view ->
+            runCatching {
+                    context.assets.open(viewPicture(view)).use { BitmapFactory.decodeStream(it).asImageBitmap() }
+                }
+                .getOrNull()
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
+        Label(stringResource(R.string.sketch_view))
+        SketchView.entries.forEach { view ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SmallGap)) {
+                pictures[view]?.let {
+                    Image(
+                        bitmap = it,
+                        contentDescription = stringResource(viewLabel(view)),
+                        modifier = Modifier.size(ViewPictureSize).clip(SquareShape),
+                    )
+                }
+                Button(
+                    onClick = { onPick(view) },
+                    colors = if (view == chosen) lightButtonColors() else darkButtonColors(),
+                ) {
+                    Text(stringResource(viewLabel(view)))
+                }
+            }
+        }
+    }
+}
+
+private fun viewPicture(v: SketchView): String =
+    when (v) {
+        SketchView.RingShape -> "views/ring_shape.png"
+        SketchView.FromAbove -> "views/top.png"
+        SketchView.Profile -> "views/profile.png"
+    }
+
 @Composable
 private fun Toggle(labelRes: Int, on: Boolean, onClick: () -> Unit) {
     Button(onClick = onClick, colors = if (on) lightButtonColors() else darkButtonColors()) {
@@ -329,6 +393,51 @@ private fun RenderView(sketch: SketchUiState) {
             Image(bitmap = image, contentDescription = stringResource(R.string.sketch_render_description), modifier = Modifier.fillMaxSize())
         } else {
             Body(stringResource(R.string.sketch_render_empty))
+        }
+    }
+}
+
+/** Before making 3D: name the piece, a few tips, and a note that it goes to the gallery. */
+@Composable
+internal fun NamingPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(Gap),
+        modifier = Modifier.width(520.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
+    ) {
+        Title(stringResource(R.string.naming_title))
+        Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
+            val image = remember(sketch.render) { sketch.render?.let(::decodeDataUri) }
+            if (image != null) {
+                Image(
+                    bitmap = image,
+                    contentDescription = stringResource(R.string.sketch_render_description),
+                    modifier = Modifier.size(CardSize).clip(SquareShape),
+                )
+            }
+            TextField(
+                value = name,
+                onValueChange = { name = it.take(NAME_LIMIT) },
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.naming_placeholder)) },
+            )
+        }
+        Body(stringResource(R.string.naming_shared))
+        Label(stringResource(R.string.naming_tips_title))
+        Body(stringResource(R.string.naming_tip_time))
+        Body(stringResource(R.string.naming_tip_view))
+        Body(stringResource(R.string.naming_tip_fit))
+        Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
+            Button(onClick = { onEvent(RingWearEvent.Cancel3d) }, colors = darkButtonColors()) {
+                Text(stringResource(R.string.naming_back))
+            }
+            Button(
+                onClick = { onEvent(RingWearEvent.ConfirmMake3d(name)) },
+                enabled = name.isNotBlank(),
+                colors = lightButtonColors(),
+            ) {
+                Text(stringResource(R.string.sketch_make_3d))
+            }
         }
     }
 }
@@ -404,16 +513,16 @@ private fun styleLabel(s: DesignStyle): Int =
 
 private fun viewLabel(v: SketchView): Int =
     when (v) {
-        SketchView.Front -> R.string.view_front
-        SketchView.Side -> R.string.view_side
-        SketchView.Top -> R.string.view_top
+        SketchView.RingShape -> R.string.view_ring_shape
+        SketchView.FromAbove -> R.string.view_from_above
+        SketchView.Profile -> R.string.view_profile
     }
 
 private fun viewHint(v: SketchView): Int =
     when (v) {
-        SketchView.Front -> R.string.hint_front
-        SketchView.Side -> R.string.hint_side
-        SketchView.Top -> R.string.hint_top
+        SketchView.RingShape -> R.string.hint_ring_shape
+        SketchView.FromAbove -> R.string.hint_from_above
+        SketchView.Profile -> R.string.hint_profile
     }
 
 @Composable
@@ -452,13 +561,20 @@ private fun guideShapes(view: SketchView): List<List<StrokePoint>> {
         }
     fun box(x0: Float, y0: Float, x1: Float, y1: Float) =
         listOf(StrokePoint(x0, y0), StrokePoint(x1, y0), StrokePoint(x1, y1), StrokePoint(x0, y1), StrokePoint(x0, y0))
+    // Matches a real ring seen from each side (Design 1, posed): the band, and a small stone
+    // marker where a stone would sit.
     return when (view) {
-        // Looking through the hole: two circles.
-        SketchView.Front -> listOf(ellipse(0.5f, 0.58f, 0.3f, 0.3f), ellipse(0.5f, 0.58f, 0.24f, 0.24f))
-        // From the side: the band is a tall narrow strip.
-        SketchView.Side -> listOf(box(0.45f, 0.28f, 0.55f, 0.88f))
-        // From above: the band is a wide narrow strip.
-        SketchView.Top -> listOf(box(0.2f, 0.45f, 0.8f, 0.55f))
+        // Through the hole: the band is two circles, the stone sits on top.
+        SketchView.RingShape ->
+            listOf(
+                ellipse(0.5f, 0.6f, 0.3f, 0.3f),
+                ellipse(0.5f, 0.6f, 0.23f, 0.23f),
+                ellipse(0.5f, 0.25f, 0.06f, 0.05f),
+            )
+        // Looking down at the stone: the band crosses as a wide strip, the stone in the middle.
+        SketchView.FromAbove -> listOf(box(0.2f, 0.45f, 0.8f, 0.55f), ellipse(0.5f, 0.5f, 0.08f, 0.08f))
+        // From the side: the band is a tall narrow strip, the stone on its top end.
+        SketchView.Profile -> listOf(box(0.46f, 0.3f, 0.54f, 0.9f), ellipse(0.5f, 0.25f, 0.06f, 0.05f))
     }
 }
 

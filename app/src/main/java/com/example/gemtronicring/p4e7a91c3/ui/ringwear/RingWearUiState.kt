@@ -3,6 +3,7 @@ package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 import com.example.gemtronicring.p4e7a91c3.domain.model.DesignStyle
 import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.Material
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingColor
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPiece
@@ -32,8 +33,10 @@ data class GalleryUiState(
 
 data class SketchUiState(
     val material: Material = Material.Gold,
+    /** Used for clay and resin only. */
+    val color: RingColor = RingColor.Pink,
     val style: DesignStyle = DesignStyle.Refined,
-    val view: SketchView = SketchView.Front,
+    val view: SketchView = SketchView.RingShape,
     /** Drawing help: average out wobble. */
     val smooth: Boolean = true,
     /** Drawing help: snap near-circles to ellipses and close near-closed strokes. */
@@ -63,6 +66,8 @@ sealed interface RingWearEvent {
 
     data class ChooseMaterial(val material: Material) : RingWearEvent
 
+    data class ChooseColor(val color: RingColor) : RingWearEvent
+
     data class ChooseStyle(val style: DesignStyle) : RingWearEvent
 
     data class ChooseView(val view: SketchView) : RingWearEvent
@@ -71,7 +76,10 @@ sealed interface RingWearEvent {
 
     data object ToggleShapes : RingWearEvent
 
+    /** Asks for a name first. */
     data object Make3d : RingWearEvent
+
+    data class ConfirmMake3d(val name: String) : RingWearEvent
 
     data object Cancel3d : RingWearEvent
 

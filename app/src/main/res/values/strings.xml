@@ -68,10 +68,19 @@
     <string name="style_vintage">Vintage</string>
     <string name="style_minimal">Minimal</string>
     <string name="style_bold">Bold</string>
-    <string name="view_front">Front</string>
-    <string name="view_side">Side</string>
-    <string name="view_top">Top</string>
-    <string name="hint_front">Front view: look through the hole. Draw on the grey band; put any stone on top.</string>
-    <string name="hint_side">Side view: the grey strip is the band seen edge-on. Draw the stone and details on it.</string>
-    <string name="hint_top">Top view: look down on the ring. Draw what sits on top of the band.</string>
+    <string name="sketch_color">Colour</string>
+    <string name="view_ring_shape">Band shape</string>
+    <string name="view_from_above">Top &amp; stone</string>
+    <string name="view_profile">Side profile</string>
+    <string name="hint_ring_shape">Band shape: you are looking through the ring. What you draw shapes the band\'s outline (gold in the picture). Put any stone on top.</string>
+    <string name="hint_from_above">Top &amp; stone: you are looking down at the top of the ring. What you draw shapes the stone and whatever sits on top.</string>
+    <string name="hint_profile">Side profile: you are looking at the ring from the side. What you draw shapes how thick the band is and how high the stone sits.</string>
+    <string name="naming_title">Name your ring</string>
+    <string name="naming_placeholder">For example, Cloud Ring</string>
+    <string name="naming_shared">Your ring will be shared in the Gallery under this name, so others can try it on too.</string>
+    <string name="naming_tips_title">Tips</string>
+    <string name="naming_tip_time">• Making it 3D takes one to two minutes.</string>
+    <string name="naming_tip_view">• Ring shape view gives the best 3D. Draw the whole band and put the stone on top.</string>
+    <string name="naming_tip_fit">• SketchOn sizes the ring to your finger and turns it so the stone faces up.</string>
+    <string name="naming_back">Keep drawing</string>
 </resources>
