@@ -2,9 +2,7 @@ package com.example.gemtronicring.p4e7a91c3.ui.ringwear.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.ui.platform.LocalContext
-import com.pico.spatial.ui.foundation.gesture.detectDragGestures as detectPicoDragGestures
-import com.pico.spatial.ui.foundation.gesture.TargetEntity
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,7 +51,6 @@ internal fun ColorWheel(colour: Int, onPicked: (Int) -> Unit) {
     var saturation by remember(colour) { mutableStateOf(start[1]) }
     var value by remember(colour) { mutableStateOf(start[2]) }
     val picked by rememberUpdatedState(onPicked)
-    val context = LocalContext.current
 
     fun current() = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, value))
     fun pointOnWheel(p: Offset, size: Float) {
@@ -76,9 +73,7 @@ internal fun ColorWheel(colour: Int, onPicked: (Int) -> Unit) {
                             detectTapGestures { pointOnWheel(it, size.width.toFloat()); picked(current()) }
                         }
                         .pointerInput(Unit) {
-                            detectPicoDragGestures(
-                                context = context,
-                                targetedToEntity = TargetEntity.any(),
+                            detectDragGestures(
                                 onDrag = { change, _ -> pointOnWheel(change.position, size.width.toFloat()) },
                                 onDragEnd = { picked(current()) },
                             )
@@ -111,9 +106,7 @@ internal fun ColorWheel(colour: Int, onPicked: (Int) -> Unit) {
                             detectTapGestures { pointOnBar(it, size.width.toFloat()); picked(current()) }
                         }
                         .pointerInput(Unit) {
-                            detectPicoDragGestures(
-                                context = context,
-                                targetedToEntity = TargetEntity.any(),
+                            detectDragGestures(
                                 onDrag = { change, _ -> pointOnBar(change.position, size.width.toFloat()) },
                                 onDragEnd = { picked(current()) },
                             )

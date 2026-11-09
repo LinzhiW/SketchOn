@@ -4,11 +4,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Paint
 import android.util.Base64
+import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import com.pico.spatial.ui.foundation.gesture.detectDragGestures as detectPicoDragGestures
-import com.pico.spatial.ui.foundation.gesture.TargetEntity
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -186,7 +187,6 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
     var lastSent by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
     val shaper = remember { ShapeStrokeUseCase() }
-    val context = LocalContext.current
     // The drag handler is set up once, so it reads the latest settings through these.
     val options by rememberUpdatedState(sketch)
     // Encodings can finish out of order; only the newest drawing may reach the server.
@@ -211,6 +211,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
 
     fun finishStroke() {
         if (current.isEmpty()) return
+        Log.d("SketchOn", "stroke: ${current.size} points")
         val shaped =
             shaper.shape(current.map { StrokePoint(it.x, it.y) }, smooth = options.smooth, shapes = options.shapes)
         strokes.add(shaped.map { Offset(it.x, it.y) })
@@ -235,22 +236,24 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                             .background(Color.White)
                             .onSizeChanged { canvasPx = it.width }
                             .pointerInput(Unit) {
-                                // PICO's drag follows the whole path; Compose's own gets only
-                                // the start and one move on the emulator.
-                                detectPicoDragGestures(
-                                    context = context,
-                                    targetedToEntity = TargetEntity.any(),
-                                    onDragStart = {
-                                        current.clear()
-                                        current.add(it)
-                                    },
-                                    onDrag = { change, _ ->
-                                        current.add(change.position)
+                                // Every event of a stroke is read here, including where the
+                                // pointer is released. Compose's drag detector drops the release
+                                // point, and the emulator sends only a down, one move and an up
+                                // per drag, so strokes stopped short of the pointer.
+                                // (PICO's spatial drag detector got no events on this panel.)
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    current.clear()
+                                    current.add(down.position)
+                                    while (true) {
+                                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                        if (change.position != current.lastOrNull()) current.add(change.position)
+                                        change.consume()
+                                        if (!change.pressed) break
                                         if (System.currentTimeMillis() - lastSent >= SEND_EVERY_MS) send()
-                                    },
-                                    onDragEnd = { finishStroke() },
-                                    onDragCancel = { finishStroke() },
-                                )
+                                    }
+                                    finishStroke()
+                                }
                             }
                 ) {
                     val guide = Stroke(width = GUIDE_WIDTH_PX * size.width / SKETCH_PX, cap = StrokeCap.Round)
