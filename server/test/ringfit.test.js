@@ -41,3 +41,25 @@ test("keeps the result a rotation, not a mirror", () => {
     m[0] * (m[5] * m[10] - m[9] * m[6]) - m[4] * (m[1] * m[10] - m[9] * m[2]) + m[8] * (m[1] * m[6] - m[5] * m[2]);
   assert.ok(det > 0);
 });
+
+test("the translation, rotation and scale give the same pose as the matrix", () => {
+  const pose = ringPose(flatRing());
+  const [x, y, z, w] = pose.rotation;
+  const rot = (p) => {
+    // q * p * q^-1
+    const ix = w * p[0] + y * p[2] - z * p[1];
+    const iy = w * p[1] + z * p[0] - x * p[2];
+    const iz = w * p[2] + x * p[1] - y * p[0];
+    const iw = -x * p[0] - y * p[1] - z * p[2];
+    return [
+      ix * w + iw * -x + iy * -z - iz * -y,
+      iy * w + iw * -y + iz * -x - ix * -z,
+      iz * w + iw * -z + ix * -y - iy * -x,
+    ];
+  };
+  for (const p of [[3, -2, 5], [4.6, -2, 5], [2, -1.9, 5.3]]) {
+    const viaTrs = rot(p.map((c) => c * pose.scale[0])).map((c, i) => c + pose.translation[i]);
+    const viaMatrix = apply(pose.matrix, p);
+    viaTrs.forEach((c, i) => assert.ok(Math.abs(c - viaMatrix[i]) < 1e-6, `${viaTrs} vs ${viaMatrix}`));
+  }
+});

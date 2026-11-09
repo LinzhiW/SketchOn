@@ -170,7 +170,43 @@ export function ringPose(points) {
     m[12 + row] = -s * (rowsOfR[row][0] * centre[0] + rowsOfR[row][1] * centre[1] + rowsOfR[row][2] * centre[2]);
   }
   m[15] = 1;
-  return { matrix: m, holeAxis: "xyz"[axis], holeFound, outerRadius: outer, centre };
+  // The same pose as translation, rotation and scale: PICO's loader ignores a node "matrix".
+  const translation = [0, 1, 2].map((row) => m[12 + row]);
+  const rotation = quaternionFromRows(rowsOfR);
+  return { matrix: m, translation, rotation, scale: [s, s, s], holeAxis: "xyz"[axis], holeFound, outerRadius: outer, centre };
+}
+
+/** A rotation given by its rows (the new axes in old coordinates) as a glTF [x, y, z, w]. */
+export function quaternionFromRows(r) {
+  const trace = r[0][0] + r[1][1] + r[2][2];
+  let x, y, z, w;
+  if (trace > 0) {
+    const k = 0.5 / Math.sqrt(trace + 1);
+    w = 0.25 / k;
+    x = (r[2][1] - r[1][2]) * k;
+    y = (r[0][2] - r[2][0]) * k;
+    z = (r[1][0] - r[0][1]) * k;
+  } else if (r[0][0] > r[1][1] && r[0][0] > r[2][2]) {
+    const k = 2 * Math.sqrt(1 + r[0][0] - r[1][1] - r[2][2]);
+    w = (r[2][1] - r[1][2]) / k;
+    x = 0.25 * k;
+    y = (r[0][1] + r[1][0]) / k;
+    z = (r[0][2] + r[2][0]) / k;
+  } else if (r[1][1] > r[2][2]) {
+    const k = 2 * Math.sqrt(1 + r[1][1] - r[0][0] - r[2][2]);
+    w = (r[0][2] - r[2][0]) / k;
+    x = (r[0][1] + r[1][0]) / k;
+    y = 0.25 * k;
+    z = (r[1][2] + r[2][1]) / k;
+  } else {
+    const k = 2 * Math.sqrt(1 + r[2][2] - r[0][0] - r[1][1]);
+    w = (r[1][0] - r[0][1]) / k;
+    x = (r[0][2] + r[2][0]) / k;
+    y = (r[1][2] + r[2][1]) / k;
+    z = 0.25 * k;
+  }
+  const n = Math.hypot(x, y, z, w);
+  return [x / n, y / n, z / n, w / n];
 }
 
 /** Rewrites a Tripo GLB into the standard ring pose. Returns the new file and what was found. */
@@ -181,9 +217,11 @@ export function poseRing(buffer) {
   }
   const pose = ringPose(positions(glb));
   const node = glb.json.nodes[0];
-  delete node.translation;
-  delete node.rotation;
-  delete node.scale;
-  node.matrix = pose.matrix;
+  // Written as translation, rotation and scale. PICO's loader ignored a node "matrix", so
+  // rings were worn in Tripo's own pose (sideways, the wrong size).
+  delete node.matrix;
+  node.translation = pose.translation;
+  node.rotation = pose.rotation;
+  node.scale = pose.scale;
   return { glb: writeGlb(glb.json, glb.rest), pose };
 }

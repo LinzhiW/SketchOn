@@ -150,10 +150,10 @@ class RingWearViewModel(
         }
     }
 
-    // ".posed": models from before the server posed rings are not reused.
+    // ".v2": models posed with a node matrix (which PICO ignores) are not reused.
     private fun modelFile(id: String): File {
         modelsDir.mkdirs()
-        return File(modelsDir, "$id.posed.glb")
+        return File(modelsDir, "$id.v2.glb")
     }
 
     private fun onSketchChanged(sketch: String?) {
