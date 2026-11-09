@@ -65,10 +65,13 @@ import kotlinx.coroutines.withContext
 
 private val PanelShape = RoundedCornerShape(24.dp)
 private val SquareShape = RoundedCornerShape(16.dp)
-private val SquareSize = 360.dp
+private val SquareSize = 300.dp
+private val LeftWidth = 616.dp
+private val RightWidth = 440.dp
+private val SectionGap = 12.dp
 private val CardSize = 150.dp
-private val ViewPictureSize = 72.dp
-private val ColourHeight = 160.dp
+private val ViewPictureSize = 56.dp
+private val ColourHeight = 150.dp
 private val Gap = 16.dp
 private val SmallGap = 8.dp
 private val Pad = 24.dp
@@ -212,13 +215,14 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
         send()
     }
 
-    // Two columns: the panel grows to fit its content in width, but is cut off past a height
-    // of about 700 dp, so the choices sit beside the drawing rather than below it.
+    // Two columns of fixed width. The panel grows to fit its content but is cut off past
+    // about 700 dp high and about 1150 dp wide, so the choices sit beside the drawing, and
+    // neither column may take the other's room (a long hint once squeezed the choices).
     Row(
         horizontalArrangement = Arrangement.spacedBy(Pad),
         modifier = Modifier.background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(Gap)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Gap), modifier = Modifier.width(LeftWidth)) {
             Title(stringResource(R.string.sketch_title))
             Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
                 Canvas(
@@ -289,76 +293,70 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
             }
             Body(statusText(sketch))
         }
-        Column(verticalArrangement = Arrangement.spacedBy(Gap)) {
+        Column(verticalArrangement = Arrangement.spacedBy(SectionGap), modifier = Modifier.width(RightWidth)) {
             // Material is clay, resin or metal. The metals (gold, silver, rose gold, platinum)
             // are metal's colours, so they sit where clay and resin show the colour wheel.
             var lastMetal by remember { mutableStateOf(Material.Gold) }
             if (sketch.material.metal) lastMetal = sketch.material
-            val group = when (sketch.material) {
-                Material.Clay -> Material.Clay
-                Material.Resin -> Material.Resin
-                else -> null
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
-                Label(stringResource(R.string.sketch_material))
-                listOf(Material.Clay to R.string.material_clay, Material.Resin to R.string.material_resin).forEach { (m, label) ->
-                    Button(
-                        onClick = { onEvent(RingWearEvent.ChooseMaterial(m)) },
-                        colors = if (group == m) lightButtonColors() else darkButtonColors(),
-                    ) {
-                        Text(stringResource(label))
-                    }
-                }
-                Button(
-                    onClick = { if (!sketch.material.metal) onEvent(RingWearEvent.ChooseMaterial(lastMetal)) },
-                    colors = if (group == null) lightButtonColors() else darkButtonColors(),
-                ) {
-                    Text(stringResource(R.string.material_metal))
-                }
+            Section(R.string.sketch_material) {
+                ButtonRow(
+                    listOf(
+                        Triple(R.string.material_clay, sketch.material == Material.Clay) { onEvent(RingWearEvent.ChooseMaterial(Material.Clay)) },
+                        Triple(R.string.material_resin, sketch.material == Material.Resin) { onEvent(RingWearEvent.ChooseMaterial(Material.Resin)) },
+                        Triple(R.string.material_metal, sketch.material.metal) {
+                            if (!sketch.material.metal) onEvent(RingWearEvent.ChooseMaterial(lastMetal))
+                        },
+                    )
+                )
             }
             // A fixed height, so the choices below do not move when the material changes.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(SmallGap),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.height(ColourHeight),
-            ) {
-                Label(stringResource(R.string.sketch_color))
+            Section(R.string.sketch_color, Modifier.height(ColourHeight)) {
                 if (sketch.material.metal) {
-                    Material.entries.filter { it.metal }.forEach { metal ->
-                        Button(
-                            onClick = { onEvent(RingWearEvent.ChooseMaterial(metal)) },
-                            colors = if (metal == sketch.material) lightButtonColors() else darkButtonColors(),
-                        ) {
-                            Text(stringResource(materialLabel(metal)))
-                        }
+                    Material.entries.filter { it.metal }.chunked(2).forEach { pair ->
+                        ButtonRow(
+                            pair.map { metal ->
+                                Triple(materialLabel(metal), metal == sketch.material) { onEvent(RingWearEvent.ChooseMaterial(metal)) }
+                            }
+                        )
                     }
                 } else {
                     ColorWheel(sketch.color) { onEvent(RingWearEvent.ChooseColor(it)) }
                 }
             }
-            ChoiceRow(R.string.sketch_style, DesignStyle.entries, sketch.style, ::styleLabel) {
-                onEvent(RingWearEvent.ChooseStyle(it))
+            Section(R.string.sketch_style) {
+                DesignStyle.entries.chunked(3).forEach { row ->
+                    ButtonRow(row.map { style -> Triple(styleLabel(style), style == sketch.style) { onEvent(RingWearEvent.ChooseStyle(style)) } })
+                }
             }
-            ViewPicker(sketch.view) { onEvent(RingWearEvent.ChooseView(it)) }
-            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
-                Label(stringResource(R.string.sketch_help))
-                Toggle(R.string.sketch_smooth, sketch.smooth) { onEvent(RingWearEvent.ToggleSmooth) }
-                Toggle(R.string.sketch_shapes, sketch.shapes) { onEvent(RingWearEvent.ToggleShapes) }
+            Section(R.string.sketch_view) { ViewPicker(sketch.view) { onEvent(RingWearEvent.ChooseView(it)) } }
+            Section(R.string.sketch_help) {
+                ButtonRow(
+                    listOf(
+                        Triple(R.string.sketch_smooth, sketch.smooth) { onEvent(RingWearEvent.ToggleSmooth) },
+                        Triple(R.string.sketch_shapes, sketch.shapes) { onEvent(RingWearEvent.ToggleShapes) },
+                    )
+                )
             }
         }
     }
 }
 
+/** A small heading with its choices underneath. */
 @Composable
-private fun <T> ChoiceRow(labelRes: Int, items: List<T>, chosen: T, label: (T) -> Int, onPick: (T) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+private fun Section(labelRes: Int, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(SmallGap), modifier = modifier) {
         Label(stringResource(labelRes))
-        items.forEach { item ->
-            Button(
-                onClick = { onPick(item) },
-                colors = if (item == chosen) lightButtonColors() else darkButtonColors(),
-            ) {
-                Text(stringResource(label(item)))
+        content()
+    }
+}
+
+/** Buttons as (label, chosen, action); the chosen ones are light. */
+@Composable
+private fun ButtonRow(buttons: List<Triple<Int, Boolean, () -> Unit>>) {
+    Row(horizontalArrangement = Arrangement.spacedBy(SmallGap)) {
+        buttons.forEach { (label, chosen, onClick) ->
+            Button(onClick = onClick, colors = if (chosen) lightButtonColors() else darkButtonColors()) {
+                Text(stringResource(label))
             }
         }
     }
@@ -379,8 +377,7 @@ private fun ViewPicker(chosen: SketchView, onPick: (SketchView) -> Unit) {
                 .getOrNull()
         }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
-        Label(stringResource(R.string.sketch_view))
+    Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
         SketchView.entries.forEach { view ->
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SmallGap)) {
                 pictures[view]?.let {
@@ -407,13 +404,6 @@ private fun viewPicture(v: SketchView): String =
         SketchView.FromAbove -> "views/top.png"
         SketchView.Profile -> "views/profile.png"
     }
-
-@Composable
-private fun Toggle(labelRes: Int, on: Boolean, onClick: () -> Unit) {
-    Button(onClick = onClick, colors = if (on) lightButtonColors() else darkButtonColors()) {
-        Text(stringResource(labelRes))
-    }
-}
 
 @Composable
 private fun RenderView(sketch: SketchUiState) {

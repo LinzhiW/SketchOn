@@ -34,10 +34,10 @@ import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 
-private val WheelSize = 118.dp
-private val BarWidth = 140.dp
-private val BarHeight = 24.dp
-private val PreviewSize = 56.dp
+private val WheelSize = 96.dp
+private val BarWidth = 160.dp
+private val BarHeight = 20.dp
+private val PreviewSize = 44.dp
 
 /**
  * A colour wheel, as in VR painting apps: around the wheel is the hue, towards the centre the
