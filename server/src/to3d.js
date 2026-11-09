@@ -39,15 +39,19 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
   async function start(image) {
     if (typeof image !== "string") throw new RenderError(400, "image is required");
     let url = image;
+    let picture = null;
     if (IMAGE_PREFIX.test(image)) {
       if (image.length > MAX_IMAGE_CHARS) throw new RenderError(413, "image is too large");
       const [header, data] = image.split(",");
       const type = header.slice(5, header.indexOf(";"));
-      url = await fal.storage.upload(new Blob([Buffer.from(data, "base64")], { type }));
+      picture = Buffer.from(data, "base64");
+      url = await fal.storage.upload(new Blob([picture], { type }));
     } else if (!/^https:\/\//.test(image)) {
       throw new RenderError(400, "image must be a data URI or an https URL");
     }
     const { request_id: jobId } = await fal.queue.submit(TRIPO_MODEL, { input: tripoInput(url) });
+    // The render becomes the piece's picture in the gallery.
+    if (picture) store.savePicture?.(jobId, picture);
     return { jobId };
   }
 

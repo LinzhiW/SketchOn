@@ -6,12 +6,13 @@
 //   -> 200 { "imageUrl": "...", "requestId": "...", "ms": 840 }
 //   POST /api/to3d    { "image": "data:image/jpeg;base64,..." }  -> 200 { "jobId": "..." }
 //   GET  /api/jobs/ID -> 200 { "status": "running" | "done" | "failed", "modelUrl"?, "error"? }
-//   GET  /models/ID.glb  a finished model
+//   GET  /models/ID.glb  a finished model;  GET /models/ID.jpg  the render it was made from
+//   GET  /api/library -> 200 { "pieces": [{ "id", "modelUrl", "pictureUrl"|null, "createdAt" }] }
 //   GET  /            the sketch test page (public/sketch.html)
 
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { fal } from "@fal-ai/client";
 import { render, RenderError } from "./render.js";
@@ -35,11 +36,28 @@ async function run(model, input) {
 }
 
 const modelPath = (id) => `${MODELS_DIR}${id}.glb`;
+const picturePath = (id) => `${MODELS_DIR}${id}.jpg`;
+
+/** Every finished piece, newest first. There are no accounts yet, so this is everyone's work. */
+function library() {
+  return readdirSync(MODELS_DIR)
+    .filter((f) => f.endsWith(".glb"))
+    .map((f) => f.slice(0, -4))
+    .filter(isJobId)
+    .map((id) => ({
+      id,
+      modelUrl: `/models/${id}.glb`,
+      pictureUrl: existsSync(picturePath(id)) ? `/models/${id}.jpg` : null,
+      createdAt: statSync(modelPath(id)).mtimeMs,
+    }))
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
 const to3d = createTo3d({
   fal,
   store: {
     has: (id) => existsSync(modelPath(id)),
     save: (id, bytes) => writeFileSync(modelPath(id), bytes),
+    savePicture: (id, bytes) => writeFileSync(picturePath(id), bytes),
     urlFor: (id) => `/models/${id}.glb`,
   },
   download: async (url) => {
@@ -105,10 +123,14 @@ async function route(req, res) {
       return send(res, 200, { status: "failed", error: reason });
     }
   }
-  const model = url.match(/^\/models\/([^/]+)\.glb$/);
-  if (req.method === "GET" && model && isJobId(model[1]) && existsSync(modelPath(model[1]))) {
-    res.writeHead(200, { "Content-Type": "model/gltf-binary" });
-    return res.end(readFileSync(modelPath(model[1])));
+  if (req.method === "GET" && url === "/api/library") return send(res, 200, { pieces: library() });
+  const file = url.match(/^\/models\/([^/]+)\.(glb|jpg)$/);
+  if (req.method === "GET" && file && isJobId(file[1])) {
+    const path = file[2] === "glb" ? modelPath(file[1]) : picturePath(file[1]);
+    if (existsSync(path)) {
+      res.writeHead(200, { "Content-Type": file[2] === "glb" ? "model/gltf-binary" : "image/jpeg" });
+      return res.end(readFileSync(path));
+    }
   }
   send(res, 404, { error: "not found" });
 }

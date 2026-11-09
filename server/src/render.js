@@ -11,13 +11,30 @@
 // z-image image-to-image barely changed the sketch; Kontext dev took 8.7 s; fal's realtime
 // LCM socket opened but never answered.
 
-// The headset sends a style id, never free text, so the prompt stays a ring render.
-export const STYLES = {
+// The headset sends ids, never free text, so the prompt stays a ring render.
+// Material is what the ring is made of; style is how it is designed; view is which side the
+// drawing shows. They are chosen separately and combined here.
+export const MATERIALS = {
   gold: "polished yellow gold",
   silver: "brushed sterling silver",
   rose: "rose gold",
-  platinum: "platinum with a small diamond",
-  vintage: "antique oxidised silver with engraved detail",
+  platinum: "platinum",
+  clay: "matte hand-shaped polymer clay in soft colours",
+  resin: "glossy translucent coloured resin",
+};
+
+export const STYLES = {
+  refined: "refined, elegant fine jewelry with delicate details",
+  cute: "cute cartoon style with rounded, chunky, playful shapes",
+  vintage: "vintage antique style with engraved patterns",
+  minimal: "minimalist modern design with clean, simple surfaces",
+  bold: "bold sculptural statement design",
+};
+
+export const VIEWS = {
+  front: "seen from the front, looking through the ring's hole",
+  side: "seen from the side, showing the band's profile",
+  top: "seen from above, looking down on the top of the ring",
 };
 
 const MAX_SKETCH_BYTES = 2 * 1024 * 1024;
@@ -32,10 +49,11 @@ export class RenderError extends Error {
   }
 }
 
-function promptFor(material) {
+function promptFor({ material, style, view }) {
   return (
-    `Turn this line sketch into a photorealistic product render of a finger ring in ${material}. ` +
-    "Keep exactly the drawn shape, proportions and viewpoint. " +
+    `Turn this line sketch into a photorealistic product render of a single finger ring made of ${material}, ` +
+    `${style}, ${view}. ` +
+    "Keep exactly the drawn shape, proportions and viewpoint. Faint grey guide lines are only a guide. " +
     "Studio lighting, plain light grey background."
   );
 }
@@ -44,8 +62,8 @@ export const ENGINES = {
   klein: {
     model: "fal-ai/flux-2/klein/4b/edit",
     live: true,
-    input: ({ sketch, material, seed }) => ({
-      prompt: promptFor(material),
+    input: ({ sketch, words, seed }) => ({
+      prompt: promptFor(words),
       image_urls: [sketch],
       image_size: SIZE,
       num_images: 1,
@@ -57,8 +75,8 @@ export const ENGINES = {
   nano: {
     model: "fal-ai/nano-banana-2/edit",
     live: false,
-    input: ({ sketch, material }) => ({
-      prompt: promptFor(material),
+    input: ({ sketch, words }) => ({
+      prompt: promptFor(words),
       image_urls: [sketch],
       num_images: 1,
       sync_mode: true,
@@ -66,17 +84,25 @@ export const ENGINES = {
   },
 };
 
-export function buildInput({ sketch, style, engine = "klein", seed }) {
+function pick(table, id, name, fallback) {
+  const key = id ?? fallback;
+  const words = table[key];
+  if (!words) throw new RenderError(400, `${name} must be one of: ${Object.keys(table).join(", ")}`);
+  return words;
+}
+
+export function buildInput({ sketch, material, style, view, engine = "klein", seed }) {
   if (typeof sketch !== "string" || !SKETCH_PREFIX.test(sketch)) {
     throw new RenderError(400, "sketch must be a base64 PNG, JPEG or WebP data URI");
   }
   if (sketch.length > MAX_SKETCH_BYTES) {
     throw new RenderError(413, "sketch is too large");
   }
-  const material = STYLES[style];
-  if (!material) {
-    throw new RenderError(400, `style must be one of: ${Object.keys(STYLES).join(", ")}`);
-  }
+  const words = {
+    material: pick(MATERIALS, material, "material", "gold"),
+    style: pick(STYLES, style, "style", "refined"),
+    view: pick(VIEWS, view, "view", "front"),
+  };
   const spec = ENGINES[engine];
   if (!spec) {
     throw new RenderError(400, `engine must be one of: ${Object.keys(ENGINES).join(", ")}`);
@@ -84,7 +110,7 @@ export function buildInput({ sketch, style, engine = "klein", seed }) {
   if (seed !== undefined && !(Number.isInteger(seed) && seed >= 0 && seed <= MAX_SEED)) {
     throw new RenderError(400, "seed must be a whole number from 0 to 2147483647");
   }
-  return spec.input({ sketch, material, seed });
+  return spec.input({ sketch, words, seed });
 }
 
 /**

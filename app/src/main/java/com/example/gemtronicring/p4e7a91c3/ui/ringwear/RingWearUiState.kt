@@ -1,10 +1,13 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 
-import com.example.gemtronicring.p4e7a91c3.domain.model.RenderStyle
+import com.example.gemtronicring.p4e7a91c3.domain.model.DesignStyle
+import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
+import com.example.gemtronicring.p4e7a91c3.domain.model.Material
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingSample
+import com.example.gemtronicring.p4e7a91c3.domain.model.SketchView
 import com.example.gemtronicring.p4e7a91c3.domain.model.WornFinger
 
 data class RingWearUiState(
@@ -14,10 +17,27 @@ data class RingWearUiState(
     val frames: List<String> = emptyList(),
     val activeFrame: String? = null,
     val sketch: SketchUiState = SketchUiState(),
+    val gallery: GalleryUiState = GalleryUiState(),
+)
+
+data class GalleryUiState(
+    val pieces: List<GalleryPiece> = emptyList(),
+    /** Each piece's render, by piece id, as image file bytes. Filled in as they arrive. */
+    val pictures: Map<String, ByteArray> = emptyMap(),
+    val loading: Boolean = false,
+    /** The piece being fetched to wear. */
+    val opening: String? = null,
+    val error: String? = null,
 )
 
 data class SketchUiState(
-    val style: RenderStyle = RenderStyle.Gold,
+    val material: Material = Material.Gold,
+    val style: DesignStyle = DesignStyle.Refined,
+    val view: SketchView = SketchView.Front,
+    /** Drawing help: average out wobble. */
+    val smooth: Boolean = true,
+    /** Drawing help: snap near-circles to ellipses and close near-closed strokes. */
+    val shapes: Boolean = true,
     /** The latest render, as a data URI. */
     val render: String? = null,
     val rendering: Boolean = false,
@@ -30,14 +50,26 @@ data class SketchUiState(
 sealed interface RingWearEvent {
     data object StartSketch : RingWearEvent
 
+    data object OpenGallery : RingWearEvent
+
     data object ChooseGemtronic : RingWearEvent
+
+    data class WearPiece(val piece: GalleryPiece) : RingWearEvent
 
     data object GoHome : RingWearEvent
 
     /** The drawing changed. [sketchDataUri] is a PNG data URI; null when the drawing is empty. */
     data class SketchChanged(val sketchDataUri: String?) : RingWearEvent
 
-    data class ChooseStyle(val style: RenderStyle) : RingWearEvent
+    data class ChooseMaterial(val material: Material) : RingWearEvent
+
+    data class ChooseStyle(val style: DesignStyle) : RingWearEvent
+
+    data class ChooseView(val view: SketchView) : RingWearEvent
+
+    data object ToggleSmooth : RingWearEvent
+
+    data object ToggleShapes : RingWearEvent
 
     data object Make3d : RingWearEvent
 

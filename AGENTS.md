@@ -54,6 +54,15 @@ npm --prefix server start
 npm --prefix server test
 ```
 
+## Sketch to try-on (V3)
+
+- Home: Draw a ring, or Gallery (the Gemtronic ring plus every piece made so far, from `GET /api/library`; no accounts yet).
+- Drawing: material (clay, resin, metals), style (refined, cute, vintage, minimal, bold) and view (front, side, top) are separate choices, combined into the prompt on the server. Each view shows a grey ring guide that is sent with the drawing.
+- Drawing help (`ShapeStrokeUseCase`): Smooth averages out wobble; Snap shapes turns a near-circle into a true circle (least-squares fit) and closes strokes whose ends nearly meet. It acts on release, because the emulator sends too few points to detect a hold.
+- Make it 3D: Tripo on fal, 1 to 2 minutes, about $0.30. The server poses every model (`server/src/ringfit.js`): it finds the hole in the mesh, so hole along Z, centre at origin, stone up, outer diameter 1. Tripo returns rings standing or lying flat, so never trust its pose.
+- The app reaches the server at `BuildConfig.SERVER_URL` (10.0.2.2:8787 on the emulator).
+- Ring screens and icons are plain files in this repo. They were once Git LFS pointers by mistake, which made textures fail with "Unable to decode texture". Do not add LFS rules for them.
+
 ## Build and run
 
 ```bash

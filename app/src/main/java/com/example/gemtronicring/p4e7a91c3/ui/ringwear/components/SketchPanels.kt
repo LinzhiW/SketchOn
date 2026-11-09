@@ -18,11 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,11 +38,18 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.gemtronicring.p4e7a91c3.R
-import com.example.gemtronicring.p4e7a91c3.domain.model.RenderStyle
+import com.example.gemtronicring.p4e7a91c3.domain.model.DesignStyle
+import com.example.gemtronicring.p4e7a91c3.domain.model.Material
+import com.example.gemtronicring.p4e7a91c3.domain.model.SketchView
+import com.example.gemtronicring.p4e7a91c3.domain.model.StrokePoint
+import com.example.gemtronicring.p4e7a91c3.domain.usecase.ShapeStrokeUseCase
+import com.example.gemtronicring.p4e7a91c3.ui.ringwear.GalleryUiState
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
+import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearViewModel
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.SketchUiState
 import com.example.gemtronicring.p4e7a91c3.ui.theme.GemtronicColors
 import com.pico.spatial.ui.design.Button
@@ -56,13 +64,19 @@ import kotlinx.coroutines.withContext
 private val PanelShape = RoundedCornerShape(24.dp)
 private val SquareShape = RoundedCornerShape(16.dp)
 private val SquareSize = 360.dp
+private val CardSize = 150.dp
 private val Gap = 16.dp
+private val SmallGap = 8.dp
 private val Pad = 24.dp
+private val Dim = Color(0xFF2A2F2C)
 private const val SEND_EVERY_MS = 300L
 private const val SKETCH_PX = 512
 private const val PEN_WIDTH_PX = 6f
+private const val GUIDE_WIDTH_PX = 3f
+private const val GUIDE_GREY = 0xFFC8C8C8.toInt()
+private const val GALLERY_COLUMNS = 3
 
-/** First panel: draw a ring, or try the Gemtronic ring. */
+/** First panel: draw a ring, or browse what has been made. */
 @Composable
 internal fun HomePanel(onEvent: (RingWearEvent) -> Unit) {
     Column(
@@ -70,19 +84,89 @@ internal fun HomePanel(onEvent: (RingWearEvent) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(440.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
-        Text(stringResource(R.string.app_name), color = light(), style = PicoTheme.typography.titleLarge)
-        Text(stringResource(R.string.home_subtitle), color = light(), style = PicoTheme.typography.bodyLarge)
+        Title(stringResource(R.string.app_name))
+        Body(stringResource(R.string.home_subtitle))
         Button(onClick = { onEvent(RingWearEvent.StartSketch) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.home_draw))
         }
-        Button(onClick = { onEvent(RingWearEvent.ChooseGemtronic) }, colors = lightButtonColors()) {
-            Text(stringResource(R.string.home_gemtronic))
+        Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = lightButtonColors()) {
+            Text(stringResource(R.string.home_gallery))
         }
-        Text(stringResource(R.string.home_community_soon), color = light(), style = PicoTheme.typography.bodyMedium)
     }
 }
 
-/** Drawing on the left, the live render on the right. */
+/** Everything there is to try on: the Gemtronic ring first, then pieces people have made. */
+@Composable
+internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> Unit) {
+    val context = LocalContext.current
+    val gemtronicPicture = remember {
+        runCatching {
+                context.assets.open("pages/idle.png").use { BitmapFactory.decodeStream(it).asImageBitmap() }
+            }
+            .getOrNull()
+    }
+    data class Card(val key: String, val label: String, val picture: ImageBitmap?, val onClick: () -> Unit)
+
+    val cards =
+        listOf(
+            Card("gemtronic", stringResource(R.string.gallery_gemtronic), gemtronicPicture) {
+                onEvent(RingWearEvent.ChooseGemtronic)
+            }
+        ) +
+            gallery.pieces.take(RingWearViewModel.GALLERY_SIZE).mapIndexed { i, piece ->
+                val bytes = gallery.pictures[piece.id]
+                val picture = remember(bytes) { bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() } }
+                Card(piece.id, stringResource(R.string.gallery_piece, gallery.pieces.size - i), picture) {
+                    onEvent(RingWearEvent.WearPiece(piece))
+                }
+            }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(Gap),
+        modifier = Modifier.background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
+    ) {
+        Title(stringResource(R.string.gallery_title))
+        Body(stringResource(R.string.gallery_subtitle))
+        cards.chunked(GALLERY_COLUMNS).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
+                row.forEach { card ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SmallGap)) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(CardSize).clip(SquareShape).background(Dim),
+                        ) {
+                            if (card.picture != null) {
+                                Image(bitmap = card.picture, contentDescription = card.label, modifier = Modifier.fillMaxSize())
+                            } else {
+                                Body(stringResource(R.string.gallery_no_picture))
+                            }
+                        }
+                        Button(
+                            onClick = card.onClick,
+                            enabled = gallery.opening == null,
+                            colors = lightButtonColors(),
+                        ) {
+                            Text(
+                                if (gallery.opening == card.key) stringResource(R.string.gallery_opening)
+                                else card.label
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        when {
+            gallery.loading -> Body(stringResource(R.string.gallery_loading))
+            gallery.error != null -> Body(stringResource(R.string.sketch_error, gallery.error))
+            gallery.pieces.isEmpty() -> Body(stringResource(R.string.gallery_empty))
+        }
+        Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = darkButtonColors()) {
+            Text(stringResource(R.string.back_button))
+        }
+    }
+}
+
+/** Drawing on the left, the live render on the right, choices underneath. */
 @Composable
 internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit) {
     val strokes = remember { mutableStateListOf<List<Offset>>() }
@@ -90,6 +174,9 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
     var canvasPx by remember { mutableStateOf(1) }
     var lastSent by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
+    val shaper = remember { ShapeStrokeUseCase() }
+    // The drag handler is set up once, so it reads the latest settings through these.
+    val options by rememberUpdatedState(sketch)
     // Encodings can finish out of order; only the newest drawing may reach the server.
     var sent by remember { mutableStateOf(0) }
     var delivered by remember { mutableStateOf(0) }
@@ -100,20 +187,30 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
         lastSent = System.currentTimeMillis()
         val all = strokes.toList() + listOf(current.toList()).filter { it.isNotEmpty() }
         val px = canvasPx
+        val view = options.view
         val number = ++sent
         scope.launch {
-            val uri = if (all.isEmpty()) null else withContext(Dispatchers.Default) { toDataUri(all, px) }
+            val uri = if (all.isEmpty()) null else withContext(Dispatchers.Default) { toDataUri(all, view, px) }
             if (number < delivered) return@launch
             delivered = number
             onEvent(RingWearEvent.SketchChanged(uri))
         }
     }
 
+    fun finishStroke() {
+        if (current.isEmpty()) return
+        val shaped =
+            shaper.shape(current.map { StrokePoint(it.x, it.y) }, smooth = options.smooth, shapes = options.shapes)
+        strokes.add(shaped.map { Offset(it.x, it.y) })
+        current.clear()
+        send()
+    }
+
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         modifier = Modifier.background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
-        Text(stringResource(R.string.sketch_title), color = light(), style = PicoTheme.typography.titleLarge)
+        Title(stringResource(R.string.sketch_title))
         Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
             Canvas(
                 modifier =
@@ -131,19 +228,15 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                                     current.add(change.position)
                                     if (System.currentTimeMillis() - lastSent >= SEND_EVERY_MS) send()
                                 },
-                                onDragEnd = {
-                                    strokes.add(current.toList())
-                                    current.clear()
-                                    send()
-                                },
-                                onDragCancel = {
-                                    strokes.add(current.toList())
-                                    current.clear()
-                                    send()
-                                },
+                                onDragEnd = { finishStroke() },
+                                onDragCancel = { finishStroke() },
                             )
                         }
             ) {
+                val guide = Stroke(width = GUIDE_WIDTH_PX * size.width / SKETCH_PX, cap = StrokeCap.Round)
+                guideShapes(sketch.view).forEach { line ->
+                    drawPath(smoothPath(line.map { Offset(it.x * size.width, it.y * size.height) }), Color(GUIDE_GREY), style = guide)
+                }
                 val pen = Stroke(width = PEN_WIDTH_PX * size.width / SKETCH_PX, cap = StrokeCap.Round, join = StrokeJoin.Round)
                 (strokes + listOf(current.toList())).forEach { points ->
                     if (points.isEmpty()) return@forEach
@@ -152,16 +245,19 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
             }
             RenderView(sketch)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RenderStyle.entries.forEach { style ->
-                val chosen = style == sketch.style
-                Button(
-                    onClick = { onEvent(RingWearEvent.ChooseStyle(style)) },
-                    colors = if (chosen) lightButtonColors() else darkButtonColors(),
-                ) {
-                    Text(stringResource(styleLabel(style)))
-                }
-            }
+        ChoiceRow(R.string.sketch_material, Material.entries, sketch.material, ::materialLabel) {
+            onEvent(RingWearEvent.ChooseMaterial(it))
+        }
+        ChoiceRow(R.string.sketch_style, DesignStyle.entries, sketch.style, ::styleLabel) {
+            onEvent(RingWearEvent.ChooseStyle(it))
+        }
+        ChoiceRow(R.string.sketch_view, SketchView.entries, sketch.view, ::viewLabel) {
+            onEvent(RingWearEvent.ChooseView(it))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+            Label(stringResource(R.string.sketch_help))
+            Toggle(R.string.sketch_smooth, sketch.smooth) { onEvent(RingWearEvent.ToggleSmooth) }
+            Toggle(R.string.sketch_shapes, sketch.shapes) { onEvent(RingWearEvent.ToggleShapes) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = darkButtonColors()) {
@@ -196,7 +292,29 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 Text(stringResource(R.string.sketch_make_3d))
             }
         }
-        Text(statusText(sketch), color = light(), style = PicoTheme.typography.bodyMedium)
+        Body(statusText(sketch))
+    }
+}
+
+@Composable
+private fun <T> ChoiceRow(labelRes: Int, items: List<T>, chosen: T, label: (T) -> Int, onPick: (T) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+        Label(stringResource(labelRes))
+        items.forEach { item ->
+            Button(
+                onClick = { onPick(item) },
+                colors = if (item == chosen) lightButtonColors() else darkButtonColors(),
+            ) {
+                Text(stringResource(label(item)))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Toggle(labelRes: Int, on: Boolean, onClick: () -> Unit) {
+    Button(onClick = onClick, colors = if (on) lightButtonColors() else darkButtonColors()) {
+        Text(stringResource(labelRes))
     }
 }
 
@@ -205,12 +323,12 @@ private fun RenderView(sketch: SketchUiState) {
     val image = remember(sketch.render) { sketch.render?.let(::decodeDataUri) }
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.size(SquareSize).clip(SquareShape).background(Color(0xFF2A2F2C)),
+        modifier = Modifier.size(SquareSize).clip(SquareShape).background(Dim),
     ) {
         if (image != null) {
             Image(bitmap = image, contentDescription = stringResource(R.string.sketch_render_description), modifier = Modifier.fillMaxSize())
         } else {
-            Text(stringResource(R.string.sketch_render_empty), color = light(), style = PicoTheme.typography.bodyLarge)
+            Body(stringResource(R.string.sketch_render_empty))
         }
     }
 }
@@ -223,33 +341,32 @@ internal fun Making3dPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Un
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(440.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
-        Text(stringResource(R.string.making_title), color = light(), style = PicoTheme.typography.titleLarge)
+        Title(stringResource(R.string.making_title))
         RenderView(sketch)
-        Text(
-            stringResource(R.string.making_progress, sketch.making3dSeconds),
-            color = light(),
-            style = PicoTheme.typography.bodyLarge,
-        )
+        Body(stringResource(R.string.making_progress, sketch.making3dSeconds))
         Button(onClick = { onEvent(RingWearEvent.Cancel3d) }, colors = darkButtonColors()) {
             Text(stringResource(R.string.making_cancel))
         }
     }
 }
 
-/** The right panel when wearing a drawn ring: it has no screen or gestures. */
+/** The right panel when wearing a made ring: it has no screen or gestures. */
 @Composable
 internal fun GeneratedGuide(onEvent: (RingWearEvent) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         modifier = Modifier.width(320.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
-        Text(stringResource(R.string.generated_title), color = light(), style = PicoTheme.typography.titleLarge)
-        Text(stringResource(R.string.generated_body), color = light(), style = PicoTheme.typography.bodyLarge)
+        Title(stringResource(R.string.generated_title))
+        Body(stringResource(R.string.generated_body))
         Button(onClick = { onEvent(RingWearEvent.ChangeFinger) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.change_finger))
         }
         Button(onClick = { onEvent(RingWearEvent.StartSketch) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.generated_draw_again))
+        }
+        Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = lightButtonColors()) {
+            Text(stringResource(R.string.home_gallery))
         }
         Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = darkButtonColors()) {
             Text(stringResource(R.string.generated_home))
@@ -263,17 +380,50 @@ private fun statusText(sketch: SketchUiState): String =
         sketch.error != null -> stringResource(R.string.sketch_error, sketch.error)
         sketch.rendering -> stringResource(R.string.sketch_rendering)
         sketch.lastRenderMs != null -> stringResource(R.string.sketch_rendered, sketch.lastRenderMs)
-        else -> stringResource(R.string.sketch_hint)
+        else -> stringResource(viewHint(sketch.view))
     }
 
-private fun styleLabel(style: RenderStyle): Int =
-    when (style) {
-        RenderStyle.Gold -> R.string.style_gold
-        RenderStyle.Silver -> R.string.style_silver
-        RenderStyle.Rose -> R.string.style_rose
-        RenderStyle.Platinum -> R.string.style_platinum
-        RenderStyle.Vintage -> R.string.style_vintage
+private fun materialLabel(m: Material): Int =
+    when (m) {
+        Material.Clay -> R.string.material_clay
+        Material.Resin -> R.string.material_resin
+        Material.Gold -> R.string.material_gold
+        Material.Silver -> R.string.material_silver
+        Material.RoseGold -> R.string.material_rose
+        Material.Platinum -> R.string.material_platinum
     }
+
+private fun styleLabel(s: DesignStyle): Int =
+    when (s) {
+        DesignStyle.Refined -> R.string.style_refined
+        DesignStyle.Cute -> R.string.style_cute
+        DesignStyle.Vintage -> R.string.style_vintage
+        DesignStyle.Minimal -> R.string.style_minimal
+        DesignStyle.Bold -> R.string.style_bold
+    }
+
+private fun viewLabel(v: SketchView): Int =
+    when (v) {
+        SketchView.Front -> R.string.view_front
+        SketchView.Side -> R.string.view_side
+        SketchView.Top -> R.string.view_top
+    }
+
+private fun viewHint(v: SketchView): Int =
+    when (v) {
+        SketchView.Front -> R.string.hint_front
+        SketchView.Side -> R.string.hint_side
+        SketchView.Top -> R.string.hint_top
+    }
+
+@Composable
+private fun Title(text: String) = Text(text, color = light(), style = PicoTheme.typography.titleLarge)
+
+@Composable
+private fun Body(text: String) = Text(text, color = light(), style = PicoTheme.typography.bodyLarge)
+
+@Composable
+private fun Label(text: String) = Text(text, color = light(), style = PicoTheme.typography.bodyMedium)
 
 @Composable
 private fun light() = PicoTheme.colorScheme.labelPrimaryLight
@@ -287,35 +437,58 @@ private fun lightButtonColors() =
 
 @Composable
 private fun darkButtonColors() =
-    ButtonDefaults.buttonColors(
-        containerColor = Color(0xFF2A2F2C),
-        contentColor = PicoTheme.colorScheme.labelPrimaryLight,
-    )
+    ButtonDefaults.buttonColors(containerColor = Dim, contentColor = PicoTheme.colorScheme.labelPrimaryLight)
 
-/** Draws the strokes black on white at 512 px, the size the render server expects. */
-private fun toDataUri(strokes: List<List<Offset>>, canvasPx: Int): String {
+/**
+ * A plain ring band to draw on, as it looks from each view, in 0..1 drawing coordinates.
+ * It is drawn light grey and sent with the drawing, so the AI has a band even when the user
+ * only draws the stone; the prompt tells it the grey lines are only a guide.
+ */
+private fun guideShapes(view: SketchView): List<List<StrokePoint>> {
+    fun ellipse(cx: Float, cy: Float, rx: Float, ry: Float) =
+        (0..72).map { k ->
+            val a = 2.0 * Math.PI * k / 72
+            StrokePoint((cx + rx * Math.cos(a)).toFloat(), (cy + ry * Math.sin(a)).toFloat())
+        }
+    fun box(x0: Float, y0: Float, x1: Float, y1: Float) =
+        listOf(StrokePoint(x0, y0), StrokePoint(x1, y0), StrokePoint(x1, y1), StrokePoint(x0, y1), StrokePoint(x0, y0))
+    return when (view) {
+        // Looking through the hole: two circles.
+        SketchView.Front -> listOf(ellipse(0.5f, 0.58f, 0.3f, 0.3f), ellipse(0.5f, 0.58f, 0.24f, 0.24f))
+        // From the side: the band is a tall narrow strip.
+        SketchView.Side -> listOf(box(0.45f, 0.28f, 0.55f, 0.88f))
+        // From above: the band is a wide narrow strip.
+        SketchView.Top -> listOf(box(0.2f, 0.45f, 0.8f, 0.55f))
+    }
+}
+
+/** Draws the guide and the strokes at 512 px, the size the render server expects. */
+private fun toDataUri(strokes: List<List<Offset>>, view: SketchView, canvasPx: Int): String {
     val bitmap = Bitmap.createBitmap(SKETCH_PX, SKETCH_PX, Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     canvas.drawColor(android.graphics.Color.WHITE)
-    val k = SKETCH_PX.toFloat() / canvasPx.coerceAtLeast(1)
-    val paint =
+    fun paint(colour: Int, width: Float) =
         Paint().apply {
-            color = android.graphics.Color.BLACK
-            strokeWidth = PEN_WIDTH_PX
+            color = colour
+            strokeWidth = width
             style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
             isAntiAlias = true
         }
-    strokes.forEach { points ->
-        if (points.isEmpty()) return@forEach
+    fun draw(points: List<Offset>, paint: Paint) {
+        if (points.isEmpty()) return
         val path = android.graphics.Path()
-        val scaled = points.map { Offset(it.x * k, it.y * k) }
-        path.moveTo(scaled[0].x, scaled[0].y)
-        if (scaled.size == 1) path.lineTo(scaled[0].x + 0.1f, scaled[0].y)
-        forEachCurve(scaled) { c, end -> path.quadTo(c.x, c.y, end.x, end.y) }
+        path.moveTo(points[0].x, points[0].y)
+        if (points.size == 1) path.lineTo(points[0].x + 0.1f, points[0].y)
+        forEachCurve(points) { c, end -> path.quadTo(c.x, c.y, end.x, end.y) }
         canvas.drawPath(path, paint)
     }
+    val guide = paint(GUIDE_GREY, GUIDE_WIDTH_PX)
+    guideShapes(view).forEach { line -> draw(line.map { Offset(it.x * SKETCH_PX, it.y * SKETCH_PX) }, guide) }
+    val k = SKETCH_PX.toFloat() / canvasPx.coerceAtLeast(1)
+    val pen = paint(android.graphics.Color.BLACK, PEN_WIDTH_PX)
+    strokes.forEach { points -> draw(points.map { Offset(it.x * k, it.y * k) }, pen) }
     val out = ByteArrayOutputStream()
     bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
     bitmap.recycle()

@@ -1,5 +1,6 @@
 package com.example.gemtronicring.p4e7a91c3.data.remote
 
+import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -10,8 +11,20 @@ import org.json.JSONObject
 
 /** The render server in SketchOn/server. The fal key stays there; the app never sees it. */
 interface SketchOnServer {
-    /** Returns the render as a data URI. */
-    suspend fun render(sketchDataUri: String, style: String, seed: Int): String
+    /** Returns the render as a data URI. The other arguments are the server's ids. */
+    suspend fun render(
+        sketchDataUri: String,
+        material: String,
+        style: String,
+        view: String,
+        seed: Int,
+    ): String
+
+    /** Every finished piece, newest first. */
+    suspend fun library(): List<GalleryPiece>
+
+    /** Fetches a small file, such as a gallery picture. */
+    suspend fun bytes(url: String): ByteArray
 
     /** Starts turning a render into 3D and returns the job id. */
     suspend fun start3d(imageDataUri: String): String
@@ -31,11 +44,19 @@ sealed interface JobStatus {
 }
 
 class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
-    override suspend fun render(sketchDataUri: String, style: String, seed: Int): String {
+    override suspend fun render(
+        sketchDataUri: String,
+        material: String,
+        style: String,
+        view: String,
+        seed: Int,
+    ): String {
         val body =
             JSONObject()
                 .put("sketch", sketchDataUri)
+                .put("material", material)
                 .put("style", style)
+                .put("view", view)
                 .put("engine", "klein")
                 .put("seed", seed)
         return post("/api/render", body, RENDER_TIMEOUT_MS).getString("imageUrl")
@@ -44,6 +65,29 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
     override suspend fun start3d(imageDataUri: String): String =
         post("/api/to3d", JSONObject().put("image", imageDataUri), RENDER_TIMEOUT_MS)
             .getString("jobId")
+
+    override suspend fun library(): List<GalleryPiece> {
+        val pieces = get("/api/library").getJSONArray("pieces")
+        return (0 until pieces.length()).map { i ->
+            val p = pieces.getJSONObject(i)
+            GalleryPiece(
+                id = p.getString("id"),
+                modelUrl = p.getString("modelUrl"),
+                pictureUrl = if (p.isNull("pictureUrl")) null else p.getString("pictureUrl"),
+            )
+        }
+    }
+
+    override suspend fun bytes(url: String): ByteArray =
+        withContext(Dispatchers.IO) {
+            val connection = open(url, POLL_TIMEOUT_MS)
+            try {
+                check(connection)
+                connection.inputStream.use { it.readBytes() }
+            } finally {
+                connection.disconnect()
+            }
+        }
 
     override suspend fun job(jobId: String): JobStatus {
         val json = get("/api/jobs/$jobId")

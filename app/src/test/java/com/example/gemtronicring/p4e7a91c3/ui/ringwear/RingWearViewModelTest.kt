@@ -3,6 +3,8 @@ package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 import com.example.gemtronicring.p4e7a91c3.data.remote.JobStatus
 import com.example.gemtronicring.p4e7a91c3.data.remote.SketchOnServer
 import com.example.gemtronicring.p4e7a91c3.data.repository.BundledRingMenuRepository
+import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
+import com.example.gemtronicring.p4e7a91c3.domain.model.Material
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
@@ -33,10 +35,21 @@ private class FakeServer : SketchOnServer {
     val renders = mutableListOf<String>()
     var jobPolls = 0
 
-    override suspend fun render(sketchDataUri: String, style: String, seed: Int): String {
-        renders += "$sketchDataUri/$style"
+    override suspend fun render(
+        sketchDataUri: String,
+        material: String,
+        style: String,
+        view: String,
+        seed: Int,
+    ): String {
+        renders += "$sketchDataUri/$material"
         return "data:image/jpeg;base64,render-of-$sketchDataUri"
     }
+
+    override suspend fun library() =
+        listOf(GalleryPiece("piece-2", "/models/piece-2.glb", "/models/piece-2.jpg"), GalleryPiece("piece-1", "/models/piece-1.glb", null))
+
+    override suspend fun bytes(url: String) = url.toByteArray()
 
     override suspend fun start3d(imageDataUri: String) = "job-1"
 
@@ -112,6 +125,30 @@ class RingWearViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("a/gold", "c/gold"), server.renders)
         assertEquals("data:image/jpeg;base64,render-of-c", viewModel.state.value.sketch.render)
+    }
+
+    @Test
+    fun `a new material renders the drawing again`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.StartSketch)
+        viewModel.onEvent(RingWearEvent.SketchChanged("a"))
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.ChooseMaterial(Material.Clay))
+        advanceUntilIdle()
+        assertEquals(listOf("a/gold", "a/clay"), server.renders)
+    }
+
+    @Test
+    fun `the gallery lists pieces with their pictures, and wearing one downloads it`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.OpenGallery)
+        advanceUntilIdle()
+        val gallery = viewModel.state.value.gallery
+        assertEquals(listOf("piece-2", "piece-1"), gallery.pieces.map { it.id })
+        assertEquals(setOf("piece-2"), gallery.pictures.keys)
+        viewModel.onEvent(RingWearEvent.WearPiece(gallery.pieces[1]))
+        advanceUntilIdle()
+        val state = viewModel.state.value
+        assertEquals(RingPhase.FingerChoosing, state.phase)
+        assertTrue(File((state.piece as RingPiece.Generated).path).exists())
     }
 
     @Test

@@ -66,7 +66,8 @@
       <option value="silver">银</option>
       <option value="rose">玫瑰金</option>
       <option value="platinum">铂金 + 小钻</option>
-      <option value="vintage">做旧银</option>
+      <option value="clay">黏土</option>
+      <option value="resin">树脂</option>
     </select>
   </label>
   <label>随机种子 <input id="seed" type="number" min="0" max="2147483647"></label>
@@ -221,7 +222,7 @@
     const seedText = $("seed").value.trim();
     const body = {
       sketch: pad.toDataURL("image/png"),
-      style: $("style").value,
+      material: $("style").value,
       engine: e.name,
       ...(seedText === "" ? {} : { seed: Number(seedText) }),
     };

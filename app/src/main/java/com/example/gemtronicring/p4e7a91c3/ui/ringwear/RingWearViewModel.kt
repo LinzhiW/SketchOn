@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.gemtronicring.p4e7a91c3.data.remote.JobStatus
 import com.example.gemtronicring.p4e7a91c3.data.remote.SketchOnServer
 import com.example.gemtronicring.p4e7a91c3.domain.model.MenuCursor
-import com.example.gemtronicring.p4e7a91c3.domain.model.RenderStyle
+import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingMenu
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
@@ -53,6 +53,8 @@ class RingWearViewModel(
                 seed = Random.nextInt(0, Int.MAX_VALUE)
                 _state.update { it.copy(phase = RingPhase.Sketching) }
             }
+            RingWearEvent.OpenGallery -> openGallery()
+            is RingWearEvent.WearPiece -> wear(event.piece)
             RingWearEvent.ChooseGemtronic -> {
                 _state.update { it.copy(piece = RingPiece.Gemtronic) }
                 enter(RingPhase.FingerChoosing)
@@ -62,10 +64,13 @@ class RingWearViewModel(
                 enter(RingPhase.Home)
             }
             is RingWearEvent.SketchChanged -> onSketchChanged(event.sketchDataUri)
-            is RingWearEvent.ChooseStyle -> {
-                _state.update { it.copy(sketch = it.sketch.copy(style = event.style)) }
-                latestSketch?.let(::requestRender)
-            }
+            is RingWearEvent.ChooseMaterial -> rerender { it.copy(material = event.material) }
+            is RingWearEvent.ChooseStyle -> rerender { it.copy(style = event.style) }
+            is RingWearEvent.ChooseView -> rerender { it.copy(view = event.view) }
+            RingWearEvent.ToggleSmooth ->
+                _state.update { it.copy(sketch = it.sketch.copy(smooth = !it.sketch.smooth)) }
+            RingWearEvent.ToggleShapes ->
+                _state.update { it.copy(sketch = it.sketch.copy(shapes = !it.sketch.shapes)) }
             RingWearEvent.Make3d -> make3d()
             RingWearEvent.Cancel3d -> {
                 making3d?.cancel()
@@ -81,6 +86,64 @@ class RingWearViewModel(
             RingWearEvent.TrackingDenied ->
                 _state.update { it.copy(phase = RingPhase.TrackingUnavailable) }
         }
+    }
+
+    /** A new material, style or view changes the render, so the drawing is rendered again. */
+    private fun rerender(change: (SketchUiState) -> SketchUiState) {
+        _state.update { it.copy(sketch = change(it.sketch)) }
+        latestSketch?.let(::requestRender)
+    }
+
+    private fun openGallery() {
+        _state.update {
+            it.copy(phase = RingPhase.Gallery, gallery = it.gallery.copy(loading = true, error = null))
+        }
+        viewModelScope.launch {
+            try {
+                val pieces = server.library()
+                _state.update { it.copy(gallery = it.gallery.copy(pieces = pieces, loading = false)) }
+                pieces.take(GALLERY_SIZE).forEach { piece ->
+                    val url = piece.pictureUrl ?: return@forEach
+                    if (piece.id in _state.value.gallery.pictures) return@forEach
+                    val bytes = runCatching { server.bytes(url) }.getOrNull() ?: return@forEach
+                    _state.update {
+                        it.copy(gallery = it.gallery.copy(pictures = it.gallery.pictures + (piece.id to bytes)))
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(gallery = it.gallery.copy(loading = false, error = reasonOf(e))) }
+            }
+        }
+    }
+
+    private fun wear(piece: GalleryPiece) {
+        if (_state.value.gallery.opening != null) return
+        _state.update { it.copy(gallery = it.gallery.copy(opening = piece.id, error = null)) }
+        viewModelScope.launch {
+            try {
+                val file = modelFile(piece.id)
+                if (!file.exists()) server.download(piece.modelUrl, file)
+                _state.update {
+                    it.copy(
+                        piece = RingPiece.Generated(file.absolutePath),
+                        gallery = it.gallery.copy(opening = null),
+                    )
+                }
+                enter(RingPhase.FingerChoosing)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(gallery = it.gallery.copy(opening = null, error = reasonOf(e))) }
+            }
+        }
+    }
+
+    // ".posed": models from before the server posed rings are not reused.
+    private fun modelFile(id: String): File {
+        modelsDir.mkdirs()
+        return File(modelsDir, "$id.posed.glb")
     }
 
     private fun onSketchChanged(sketch: String?) {
@@ -112,9 +175,9 @@ class RingWearViewModel(
     private suspend fun renderOnce(sketch: String) {
         _state.update { it.copy(sketch = it.sketch.copy(rendering = true)) }
         val started = System.currentTimeMillis()
-        val style = _state.value.sketch.style
+        val options = _state.value.sketch
         try {
-            val image = server.render(sketch, style.id, seed)
+            val image = server.render(sketch, options.material.id, options.style.id, options.view.id, seed)
             // A cleared drawing should not get a late render back.
             if (latestSketch == null) return
             _state.update {
@@ -156,9 +219,7 @@ class RingWearViewModel(
                     }
                     when (val result = status) {
                         is JobStatus.Done -> {
-                            modelsDir.mkdirs()
-                            // ".posed": models from before the server posed rings are not reused.
-                            val file = File(modelsDir, "$jobId.posed.glb")
+                            val file = modelFile(jobId)
                             if (!file.exists()) server.download(result.modelUrl, file)
                             _state.update { it.copy(piece = RingPiece.Generated(file.absolutePath)) }
                             enter(RingPhase.FingerChoosing)
@@ -210,7 +271,9 @@ class RingWearViewModel(
             else -> e.message ?: "Something went wrong."
         }
 
-    private companion object {
-        const val POLL_INTERVAL_MS = 3_000L
+    companion object {
+        /** Pieces shown in the gallery, newest first. */
+        const val GALLERY_SIZE = 8
+        private const val POLL_INTERVAL_MS = 3_000L
     }
 }

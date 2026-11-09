@@ -4,8 +4,8 @@ import { buildInput, render, RenderError, ENGINES } from "../src/render.js";
 
 const SKETCH = "data:image/png;base64,iVBORw0KGgo=";
 
-test("builds the Klein input from a sketch and a style", () => {
-  const input = buildInput({ sketch: SKETCH, style: "gold" });
+test("builds the Klein input from a sketch, with defaults for material, style and view", () => {
+  const input = buildInput({ sketch: SKETCH });
   assert.deepEqual(input.image_urls, [SKETCH]);
   assert.match(input.prompt, /yellow gold/);
   assert.deepEqual(input.image_size, { width: 512, height: 512 });
@@ -13,11 +13,11 @@ test("builds the Klein input from a sketch and a style", () => {
 });
 
 test("passes a fixed seed to Klein", () => {
-  assert.equal(buildInput({ sketch: SKETCH, style: "rose", seed: 42 }).seed, 42);
+  assert.equal(buildInput({ sketch: SKETCH, material: "rose", seed: 42 }).seed, 42);
 });
 
 test("builds the Nano Banana input without a seed", () => {
-  const input = buildInput({ sketch: SKETCH, style: "silver", engine: "nano", seed: 42 });
+  const input = buildInput({ sketch: SKETCH, material: "silver", engine: "nano", seed: 42 });
   assert.deepEqual(input.image_urls, [SKETCH]);
   assert.equal("seed" in input, false);
 });
@@ -27,18 +27,27 @@ test("only Klein runs live", () => {
   assert.equal(ENGINES.nano.live, false);
 });
 
-test("rejects a style that is not on the list", () => {
-  assert.throws(() => buildInput({ sketch: SKETCH, style: "anything you like" }), RenderError);
+test("rejects a material, style or view that is not on the list", () => {
+  assert.throws(() => buildInput({ sketch: SKETCH, material: "anything you like" }), RenderError);
+  assert.throws(() => buildInput({ sketch: SKETCH, style: "anything" }), RenderError);
+  assert.throws(() => buildInput({ sketch: SKETCH, view: "back" }), RenderError);
+});
+
+test("combines material, style and view in the prompt", () => {
+  const { prompt } = buildInput({ sketch: SKETCH, material: "clay", style: "cute", view: "top" });
+  assert.match(prompt, /polymer clay/);
+  assert.match(prompt, /cartoon/);
+  assert.match(prompt, /from above/);
 });
 
 test("rejects an unknown engine and a bad seed", () => {
-  assert.throws(() => buildInput({ sketch: SKETCH, style: "gold", engine: "other" }), RenderError);
-  assert.throws(() => buildInput({ sketch: SKETCH, style: "gold", seed: -1 }), RenderError);
-  assert.throws(() => buildInput({ sketch: SKETCH, style: "gold", seed: 1.5 }), RenderError);
+  assert.throws(() => buildInput({ sketch: SKETCH, engine: "other" }), RenderError);
+  assert.throws(() => buildInput({ sketch: SKETCH, seed: -1 }), RenderError);
+  assert.throws(() => buildInput({ sketch: SKETCH, seed: 1.5 }), RenderError);
 });
 
 test("rejects a sketch that is not an image data URI", () => {
-  assert.throws(() => buildInput({ sketch: "https://example.com/a.png", style: "gold" }), RenderError);
+  assert.throws(() => buildInput({ sketch: "https://example.com/a.png" }), RenderError);
 });
 
 test("calls the chosen engine once and returns the image URL", async () => {
@@ -47,7 +56,7 @@ test("calls the chosen engine once and returns the image URL", async () => {
     calls.push({ model, input });
     return { images: [{ url: "https://fal.media/out.jpg" }], requestId: "req-1" };
   };
-  const result = await render({ sketch: SKETCH, style: "silver", engine: "nano" }, run);
+  const result = await render({ sketch: SKETCH, material: "silver", engine: "nano" }, run);
   assert.equal(result.imageUrl, "https://fal.media/out.jpg");
   assert.equal(result.requestId, "req-1");
   assert.equal(typeof result.ms, "number");
@@ -57,5 +66,5 @@ test("calls the chosen engine once and returns the image URL", async () => {
 
 test("reports a missing image as an upstream error", async () => {
   const run = async () => ({ images: [] });
-  await assert.rejects(render({ sketch: SKETCH, style: "rose" }, run), (e) => e.status === 502);
+  await assert.rejects(render({ sketch: SKETCH, material: "rose" }, run), (e) => e.status === 502);
 });
