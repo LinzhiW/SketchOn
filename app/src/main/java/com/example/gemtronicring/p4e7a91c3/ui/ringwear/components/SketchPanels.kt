@@ -135,14 +135,19 @@ internal fun RecentreButton(onEvent: (RingWearEvent) -> Unit) {
 
 /** Log in or sign up. The gallery stays open to everyone. */
 @Composable
-internal fun LoginPanel(login: LoginUiState, drafts: TextDrafts, onEvent: (RingWearEvent) -> Unit) {
+internal fun LoginPanel(
+    login: LoginUiState,
+    drafts: TextDrafts,
+    onEvent: (RingWearEvent) -> Unit,
+    modifier: Modifier = Modifier.width(440.dp),
+) {
     val name = drafts.loginName
     val password = drafts.loginPassword
     val ready = name.isNotBlank() && password.isNotEmpty() && !login.busy
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(440.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
+        modifier = modifier.background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
         Title(stringResource(R.string.app_name))
         Body(stringResource(R.string.login_body))
@@ -176,11 +181,8 @@ internal fun LoginPanel(login: LoginUiState, drafts: TextDrafts, onEvent: (RingW
             login.busy -> Body(stringResource(R.string.login_busy))
             login.error != null -> Body(login.error)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
-            Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = darkButtonColors()) {
-                Text(stringResource(R.string.login_browse))
-            }
-            RecentreButton(onEvent)
+        Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = darkButtonColors()) {
+            Text(stringResource(R.string.login_browse))
         }
     }
 }

@@ -258,7 +258,9 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             AttachmentPanel(CONTROL_PANEL_ID) { ControlPanel(onEvent) }
         },
         update = { _, attachments ->
-            attachments.entity(CENTER_PANEL_ID)?.enabled = state.phase != RingPhase.RingWorn
+            // Signing in has its own system window.
+            attachments.entity(CENTER_PANEL_ID)?.enabled =
+                state.phase != RingPhase.RingWorn && state.phase != RingPhase.Login
             val ringInUse =
                 state.phase == RingPhase.HandSearching || state.phase == RingPhase.RingWorn
             attachments.entity(GUIDE_PANEL_ID)?.enabled = ringInUse
