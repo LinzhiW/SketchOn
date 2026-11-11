@@ -65,13 +65,20 @@ npm --prefix server test
 - The drawing panel is cut off past about 700 dp high and 1150 dp wide; keep the two fixed-width columns.
 - Drawing help (`ShapeStrokeUseCase`): Smooth averages out wobble; Snap shapes turns a near-circle into a true circle (least-squares fit) and closes strokes whose ends nearly meet. It acts on release, because the emulator sends too few points to detect a hold.
 - Make it 3D: Tripo on fal, 1 to 2 minutes, about $0.30. The server poses every model (`server/src/ringfit.js`): it finds the hole in the mesh, so hole along Z, centre at origin, stone up, outer diameter 1. Tripo returns rings standing or lying flat, so never trust its pose.
-- The app reaches the server at `BuildConfig.SERVER_URL` (10.0.2.2:8787 on the emulator).
+- The app reaches the server at `BuildConfig.SERVER_URL`: the cloud server https://sketchon-502g.onrender.com by default. For a server on this computer from the emulator, build with `-PsketchonServer=http://10.0.2.2:8787`.
 - Ring screens and icons are plain files in this repo. They were once Git LFS pointers by mistake, which made textures fail with "Unable to decode texture". Do not add LFS rules for them.
 
 ## Accounts
 
 - `server/src/db.js` (node:sqlite, `server/data/sketchon.db`): users (scrypt hash + salt), tokens (SHA-256 of a random token, 90 days), pieces (id, user, author name, name, material). `/api/render`, `/api/to3d` and `/api/jobs/ID/name` need `Authorization: Bearer`. Only a piece's maker may name it.
 - The app keeps the session in private SharedPreferences (`PreferencesSessionStore`); a 401 (`NotLoggedInException`) sends the user to the Login panel. Login travels over plain HTTP: demo only.
+
+## Cloud (V4)
+
+- Server: Render web service `sketchon` from `render.yaml` (free plan; it sleeps after 15 minutes idle and takes about a minute to wake). Secrets are Render environment variables.
+- Database and files: Supabase project `sketchon` (us-west-1). `DATABASE_URL` uses the session pooler (IPv4). Models and pictures are in the public `pieces` bucket.
+- `server/.env.local` holds the same secrets for running against the cloud from this computer. Never print it.
+- Headset: PICO Space Pro (B3110, PICO OS 6.2). Enable Developer options in Settings, turn on USB debugging, replug, and allow the computer. Then `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Build and run
 

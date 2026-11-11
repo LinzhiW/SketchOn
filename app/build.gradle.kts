@@ -12,11 +12,12 @@ android {
         applicationId = "com.example.gemtronicring.p4e7a91c3"
         minSdk = 35
         targetSdk = 35
-        versionCode = 3
-        versionName = "3.0"
-        // The render server. 10.0.2.2 is the computer, as seen from the emulator. For a headset,
-        // build with -PsketchonServer=http://<computer's LAN address>:8787
-        val server = (project.findProperty("sketchonServer") as String?) ?: "http://10.0.2.2:8787"
+        versionCode = 4
+        versionName = "4.0"
+        // The render server: the cloud one on Render by default. To use a server on this
+        // computer from the emulator, build with -PsketchonServer=http://10.0.2.2:8787
+        val server =
+            (project.findProperty("sketchonServer") as String?) ?: "https://sketchon-502g.onrender.com"
         buildConfigField("String", "SERVER_URL", "\"$server\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
