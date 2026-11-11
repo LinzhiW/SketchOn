@@ -40,13 +40,13 @@ private val PanelPadding = 24.dp
 
 /** The panel in front of the user: finger choice first, then whatever the ring needs next. */
 @Composable
-internal fun CenterPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit) {
+internal fun CenterPanel(state: RingWearUiState, drafts: TextDrafts, onEvent: (RingWearEvent) -> Unit) {
     when (state.phase) {
-        RingPhase.Login -> LoginPanel(state.login, onEvent)
+        RingPhase.Login -> LoginPanel(state.login, drafts, onEvent)
         RingPhase.Home -> HomePanel(state.user, onEvent)
         RingPhase.Gallery -> GalleryPanel(state.gallery, onEvent)
         RingPhase.Sketching -> SketchPanel(state.sketch, onEvent)
-        RingPhase.Naming -> NamingPanel(state.sketch, onEvent)
+        RingPhase.Naming -> NamingPanel(state.sketch, drafts, onEvent)
         RingPhase.Making3D -> Making3dPanel(state.sketch, onEvent)
         RingPhase.Painting -> PaintingPanel(state, onEvent)
         RingPhase.FingerChoosing -> FingerPanel(state, onEvent)

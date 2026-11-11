@@ -31,6 +31,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -112,6 +115,16 @@ internal fun RingSizeRow(ringScale: Float, onEvent: (RingWearEvent) -> Unit) {
     }
 }
 
+/**
+ * What the user is typing. Kept outside the panels: on the headset the panels are rebuilt as
+ * the head and hands move, which would wipe text held inside them.
+ */
+internal class TextDrafts {
+    var loginName by mutableStateOf("")
+    var loginPassword by mutableStateOf("")
+    var pieceName by mutableStateOf("")
+}
+
 /** Brings the panels in front of the user. */
 @Composable
 internal fun RecentreButton(onEvent: (RingWearEvent) -> Unit) {
@@ -122,9 +135,9 @@ internal fun RecentreButton(onEvent: (RingWearEvent) -> Unit) {
 
 /** Log in or sign up. The gallery stays open to everyone. */
 @Composable
-internal fun LoginPanel(login: LoginUiState, onEvent: (RingWearEvent) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+internal fun LoginPanel(login: LoginUiState, drafts: TextDrafts, onEvent: (RingWearEvent) -> Unit) {
+    val name = drafts.loginName
+    val password = drafts.loginPassword
     val ready = name.isNotBlank() && password.isNotEmpty() && !login.busy
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
@@ -135,15 +148,18 @@ internal fun LoginPanel(login: LoginUiState, onEvent: (RingWearEvent) -> Unit) {
         Body(stringResource(R.string.login_body))
         TextField(
             value = name,
-            onValueChange = { name = it.take(20) },
+            onValueChange = { drafts.loginName = it.take(20) },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             colors = fieldColors(),
             placeholder = { Text(stringResource(R.string.login_name)) },
         )
         TextField(
             value = password,
-            onValueChange = { password = it.take(100) },
+            onValueChange = { drafts.loginPassword = it.take(100) },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { if (ready) onEvent(RingWearEvent.LogIn(name, password)) }),
             colors = fieldColors(),
             visualTransformation = PasswordVisualTransformation(),
             placeholder = { Text(stringResource(R.string.login_password)) },
@@ -160,8 +176,11 @@ internal fun LoginPanel(login: LoginUiState, onEvent: (RingWearEvent) -> Unit) {
             login.busy -> Body(stringResource(R.string.login_busy))
             login.error != null -> Body(login.error)
         }
-        Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = darkButtonColors()) {
-            Text(stringResource(R.string.login_browse))
+        Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
+            Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = darkButtonColors()) {
+                Text(stringResource(R.string.login_browse))
+            }
+            RecentreButton(onEvent)
         }
     }
 }
@@ -537,8 +556,8 @@ private fun RenderView(sketch: SketchUiState) {
 
 /** Before making 3D: name the piece, a few tips, and a note that it goes to the gallery. */
 @Composable
-internal fun NamingPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit) {
-    var name by remember { mutableStateOf("") }
+internal fun NamingPanel(sketch: SketchUiState, drafts: TextDrafts, onEvent: (RingWearEvent) -> Unit) {
+    val name = drafts.pieceName
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         modifier = Modifier.width(520.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
@@ -555,8 +574,10 @@ internal fun NamingPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
             }
             TextField(
                 value = name,
-                onValueChange = { name = it.take(NAME_LIMIT) },
+                onValueChange = { drafts.pieceName = it.take(NAME_LIMIT) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { if (name.isNotBlank()) onEvent(RingWearEvent.ConfirmMake3d(name)) }),
             colors = fieldColors(),
                 placeholder = { Text(stringResource(R.string.naming_placeholder)) },
             )

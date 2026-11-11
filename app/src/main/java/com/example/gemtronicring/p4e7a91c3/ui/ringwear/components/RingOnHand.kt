@@ -19,13 +19,14 @@ import com.example.gemtronicring.p4e7a91c3.domain.model.RingSample
 import com.example.gemtronicring.p4e7a91c3.domain.model.WornFinger
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearUiState
-import com.pico.spatial.core.ecs.AnchorComponent
 import com.pico.spatial.core.ecs.Entity
 import com.pico.spatial.core.ecs.TransformComponent
 import com.pico.spatial.core.math.Quat
 import com.pico.spatial.core.math.Vector3
 import com.pico.spatial.tracking.DataProvider
 import com.pico.spatial.tracking.hand.HandJoint
+import com.pico.spatial.tracking.hmd.HMDPose
+import com.pico.spatial.tracking.hmd.HMDTrackingProvider
 import com.pico.spatial.tracking.hand.HandPose
 import com.pico.spatial.tracking.hand.HandTrackingData
 import com.pico.spatial.tracking.hand.HandTrackingProvider
@@ -36,6 +37,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 import kotlin.math.atan2
+import kotlin.math.sqrt
 
 private const val TAG = "SketchOn"
 private const val CENTER_PANEL_ID = "center-panel"
@@ -119,20 +121,72 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         }
     }
 
+    val drafts = remember { TextDrafts() }
+    // A new drawing gets a new name; a password is not kept once signed in.
+    LaunchedEffect(state.phase) {
+        if (state.phase == RingPhase.Sketching) drafts.pieceName = ""
+        if (state.user != null) drafts.loginPassword = ""
+    }
     var rig by remember { mutableStateOf<WornRing?>(null) }
     val stageRoot = remember { Entity() }
     // The panels hang from this, placed in front of the user (see recentre below). On a headset
     // the stage's origin is not where the user's head is, so fixed positions put panels out of
     // sight; the emulator happened to match.
     val panelsRoot = remember { Entity().also { stageRoot.addChild(it) } }
-    // An invisible entity anchored to the headset camera, to read where the head is.
-    val headProbe = remember { Entity().apply { components.set(AnchorComponent()) } }
     var panelsYaw by remember { mutableStateOf(Quat(Vector3(0f, 1f, 0f), 0f)) }
+    // The headset's own pose, in world space (only reported in full space).
+    val hmdProvider = remember { HMDTrackingProvider() }
+    DisposableEffect(hmdProvider) {
+        hmdProvider.start()
+        onDispose { hmdProvider.stop() }
+    }
     // Every new panel, and every press of "Bring panels here", comes up in front of the user.
+    val currentData by rememberUpdatedState(data)
     LaunchedEffect(state.phase, state.recentre) {
-        // The anchor needs a frame or two to report the head.
-        delay(RECENTRE_DELAY_MS)
-        panelsYaw = placeInFront(panelsRoot, stageRoot, headProbe)
+        // In front of the headset as soon as it reports; failing that, in front of a hand.
+        var waited = 0L
+        while (waited < HAND_WAIT_MS) {
+            val hmd = hmdProvider.latestData
+            val turn =
+                if (hmd.hmdPose.position != Vector3.ZERO) placeByHead(panelsRoot, stageRoot, hmd.hmdPose, waited)
+                else if (waited >= HEAD_WAIT_MS) placeByHand(panelsRoot, stageRoot, currentData, waited)
+                else null
+            if (turn != null) {
+                panelsYaw = turn
+                return@LaunchedEffect
+            }
+            delay(HAND_POLL_MS)
+            waited += HAND_POLL_MS
+        }
+        Log.i(TAG, "neither head nor hand seen; panels left where they are")
+    }
+    // Both hands pinched for a second brings the panels in front of the hands: works even when
+    // no panel is in sight to press "Bring panels here" on.
+    LaunchedEffect(Unit) {
+        var heldMs = 0L
+        while (true) {
+            delay(HAND_POLL_MS)
+            val d = currentData
+            val bothPinched =
+                d.leftPinch?.let { it.isReady && it.pinchValue > PINCH_ON } == true &&
+                    d.rightPinch?.let { it.isReady && it.pinchValue > PINCH_ON } == true
+            heldMs = if (bothPinched) heldMs + HAND_POLL_MS else 0L
+            if (heldMs >= SUMMON_HOLD_MS) {
+                heldMs = Long.MIN_VALUE / 2 // once per hold
+                placeByBothHands(panelsRoot, stageRoot, d)?.let { panelsYaw = it }
+            }
+            if (!bothPinched) heldMs = 0L
+        }
+    }
+    // Where the hands are, every two seconds, to see where the stage's origin is on a headset.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(HAND_LOG_MS)
+            val d = currentData
+            Log.i(TAG, "hands: right=${d.right?.get(HandJoint.Index.WRIST)?.position} " +
+                "left=${d.left?.get(HandJoint.Index.WRIST)?.position} " +
+                "rightAim=${d.rightAim?.takeIf { it.isReady }?.aimPose?.position}")
+        }
     }
     // Load whichever ring is chosen, replacing the one before.
     LaunchedEffect(state.piece, state.frames) {
@@ -196,7 +250,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                 }
             },
         attachments = {
-            AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, onEvent) }
+            AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, drafts, onEvent) }
             AttachmentPanel(GUIDE_PANEL_ID) {
                 if (isGemtronic) GestureGuide(state.activeFrame, state.ringScale, onEvent)
                 else GeneratedGuide(state.paintable, state.ringScale, onEvent)
@@ -224,7 +278,6 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         },
     ) { content, attachments ->
         content.addEntity(stageRoot)
-        content.addEntity(headProbe)
         attachments.entity(CENTER_PANEL_ID)?.apply {
             components[TransformComponent::class.java]?.setPosition(CENTER_PANEL_POSITION)
             panelsRoot.addChild(this)
@@ -247,7 +300,16 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
 }
 
 private const val TURN_PER_PX = 0.4f
-private const val RECENTRE_DELAY_MS = 400L
+private const val HAND_POLL_MS = 100L
+private const val HAND_WAIT_MS = 10_000L
+/** How long to wait for the headset's pose before falling back to a hand. */
+private const val HEAD_WAIT_MS = 2000L
+private const val HAND_LOG_MS = 2000L
+private const val SUMMON_HOLD_MS = 1000L
+private const val PINCH_ON = 0.8f
+/** A hand held up in front sits about this far below the eyes, and this far ahead of them. */
+private const val HAND_BELOW_HEAD_M = 0.35f
+private const val HAND_AHEAD_M = 0.3f
 /** The panel positions above assume a head this high above the panels' frame. */
 private const val HEAD_HEIGHT_M = 1.5f
 /** RingRig and GeneratedRingRig build rings at this multiple of real size. */
@@ -270,20 +332,90 @@ private fun holdForPainting(ring: Entity, stageRoot: Entity, panelsRoot: Entity,
 }
 
 /**
- * Puts the panels' frame where the user's head is, turned to where they face. Only the turn
- * left and right is used, so panels stay upright. Panel positions are written for a head at
- * [HEAD_HEIGHT_M], so the frame sits that far below the head. Returns the turn.
+ * Puts the panels' frame in front of a tracked hand, turned the way the hand points. The head
+ * is taken to be [HAND_BELOW_HEAD_M] above the hand and [HAND_AHEAD_M] behind it; the panel
+ * positions are written for a head at [HEAD_HEIGHT_M] above the frame. Returns the turn, or
+ * null when no hand is tracked.
  */
-private fun placeInFront(panelsRoot: Entity, stageRoot: Entity, headProbe: Entity): Quat {
-    val head = stageRoot.convertPositionFrom(Vector3(0f, 0f, 0f), headProbe)
-    val facing = stageRoot.convertRotationFrom(Quat(Vector3(0f, 1f, 0f), 0f), headProbe)
-    val forward = facing.rotateVector(Vector3(0f, 0f, -1f))
-    val turn = Quat(Vector3(0f, 1f, 0f), atan2(-forward.x, -forward.z))
+private fun placeByHand(panelsRoot: Entity, stageRoot: Entity, data: HandTrackingData, waitedMs: Long): Quat? {
+    val aim = data.rightAim?.takeIf { it.isReady } ?: data.leftAim?.takeIf { it.isReady }
+    val wrist = (data.right ?: data.left)?.get(HandJoint.Index.WRIST)?.position
+    val hand = aim?.aimPose?.position ?: wrist ?: return null
+    // Which way the user faces: where the aim ray points, flattened. Without one, stage forward.
+    var fx = 0f
+    var fz = -1f
+    aim?.aimPose?.rotation?.rotateVector(Vector3(0f, 0f, -1f))?.let {
+        val len = sqrt(it.x * it.x + it.z * it.z)
+        if (len > 0.2f) {
+            fx = it.x / len
+            fz = it.z / len
+        }
+    }
+    return placeFrame(panelsRoot, stageRoot, hand, fx, fz, "hand (aim=${aim != null}) after ${waitedMs}ms")
+}
+
+/** Both hands held up and pinched: panels go in front of the point between them. */
+private fun placeByBothHands(panelsRoot: Entity, stageRoot: Entity, data: HandTrackingData): Quat? {
+    val l = data.left?.get(HandJoint.Index.WRIST)?.position ?: return null
+    val r = data.right?.get(HandJoint.Index.WRIST)?.position ?: return null
+    val mid = Vector3((l.x + r.x) / 2f, (l.y + r.y) / 2f, (l.z + r.z) / 2f)
+    // Facing is square to the line between the wrists; of its two senses, the one the aim rays
+    // agree with (or stage forward without them).
+    var fx = -(r.z - l.z)
+    var fz = r.x - l.x
+    val len = sqrt(fx * fx + fz * fz)
+    if (len < 0.05f) return null
+    fx /= len
+    fz /= len
+    var ax = 0f
+    var az = -1f
+    listOfNotNull(data.leftAim, data.rightAim).filter { it.isReady }.forEach {
+        val v = it.aimPose.rotation.rotateVector(Vector3(0f, 0f, -1f))
+        ax += v.x
+        az += v.z
+    }
+    if (fx * ax + fz * az < 0f) {
+        fx = -fx
+        fz = -fz
+    }
+    return placeFrame(panelsRoot, stageRoot, mid, fx, fz, "both hands pinched")
+}
+
+/** Puts the panels' frame in front of the headset, turned the way it faces (left/right only). */
+private fun placeByHead(panelsRoot: Entity, stageRoot: Entity, pose: HMDPose, waitedMs: Long): Quat {
+    val f = pose.rotation.rotateVector(Vector3(0f, 0f, -1f))
+    var fx = 0f
+    var fz = -1f
+    val len = sqrt(f.x * f.x + f.z * f.z)
+    if (len > 0.1f) {
+        fx = f.x / len
+        fz = f.z / len
+    }
+    val head = pose.position
+    val worldTurn = Quat(Vector3(0f, 1f, 0f), atan2(-fx, -fz))
+    val framePos = stageRoot.convertPositionFrom(Vector3(head.x, head.y - HEAD_HEIGHT_M, head.z), null)
+    val turn = stageRoot.convertRotationFrom(worldTurn, null)
     panelsRoot.components[TransformComponent::class.java]?.apply {
-        setPosition(Vector3(head.x, head.y - HEAD_HEIGHT_M, head.z))
+        setPosition(framePos)
         setQuaternion(turn)
     }
-    Log.i(TAG, "panels placed in front: head=$head")
+    Log.i(TAG, "panels placed by head: head=$head facing=($fx, $fz) frame=$framePos after ${waitedMs}ms")
+    return turn
+}
+
+/** Puts the frame for a head [HAND_BELOW_HEAD_M] above and [HAND_AHEAD_M] behind [hand]. */
+private fun placeFrame(panelsRoot: Entity, stageRoot: Entity, hand: Vector3, fx: Float, fz: Float, why: String): Quat {
+    val head = Vector3(hand.x - fx * HAND_AHEAD_M, hand.y + HAND_BELOW_HEAD_M, hand.z - fz * HAND_AHEAD_M)
+    val worldTurn = Quat(Vector3(0f, 1f, 0f), atan2(-fx, -fz))
+    // Hand data is in world space; the panels' frame hangs from the stage root, which need not
+    // sit at the world origin.
+    val framePos = stageRoot.convertPositionFrom(Vector3(head.x, head.y - HEAD_HEIGHT_M, head.z), null)
+    val turn = stageRoot.convertRotationFrom(worldTurn, null)
+    panelsRoot.components[TransformComponent::class.java]?.apply {
+        setPosition(framePos)
+        setQuaternion(turn)
+    }
+    Log.i(TAG, "panels placed by $why: hand=$hand facing=($fx, $fz) frame=$framePos")
     return turn
 }
 
