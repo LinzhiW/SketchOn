@@ -44,6 +44,10 @@ android {
         compose = true
         buildConfig = true
     }
+    // Unit tests run without Android; let calls such as android.util.Log return defaults.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {

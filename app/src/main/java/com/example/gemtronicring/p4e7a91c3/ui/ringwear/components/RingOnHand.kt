@@ -19,6 +19,7 @@ import com.example.gemtronicring.p4e7a91c3.domain.model.RingSample
 import com.example.gemtronicring.p4e7a91c3.domain.model.WornFinger
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearUiState
+import com.pico.spatial.core.ecs.AnchorComponent
 import com.pico.spatial.core.ecs.Entity
 import com.pico.spatial.core.ecs.TransformComponent
 import com.pico.spatial.core.math.Quat
@@ -34,6 +35,7 @@ import com.pico.spatial.ui.foundation.gesture.detectSpatialDragGesture
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
+import kotlin.math.atan2
 
 private const val TAG = "SketchOn"
 private const val CENTER_PANEL_ID = "center-panel"
@@ -119,6 +121,19 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
 
     var rig by remember { mutableStateOf<WornRing?>(null) }
     val stageRoot = remember { Entity() }
+    // The panels hang from this, placed in front of the user (see recentre below). On a headset
+    // the stage's origin is not where the user's head is, so fixed positions put panels out of
+    // sight; the emulator happened to match.
+    val panelsRoot = remember { Entity().also { stageRoot.addChild(it) } }
+    // An invisible entity anchored to the headset camera, to read where the head is.
+    val headProbe = remember { Entity().apply { components.set(AnchorComponent()) } }
+    var panelsYaw by remember { mutableStateOf(Quat(Vector3(0f, 1f, 0f), 0f)) }
+    // Every new panel, and every press of "Bring panels here", comes up in front of the user.
+    LaunchedEffect(state.phase, state.recentre) {
+        // The anchor needs a frame or two to report the head.
+        delay(RECENTRE_DELAY_MS)
+        panelsYaw = placeInFront(panelsRoot, stageRoot, headProbe)
+    }
     // Load whichever ring is chosen, replacing the one before.
     LaunchedEffect(state.piece, state.frames) {
         rig?.destroy()
@@ -133,6 +148,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                 }
             }
             .onSuccess {
+                Log.i(TAG, "ring loaded: ${piece::class.simpleName}, ${it?.parts() ?: 0} parts")
                 rig = it
                 if (it != null) currentOnEvent(RingWearEvent.RingLoaded(it.parts()))
             }
@@ -141,11 +157,11 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
     val isGemtronic = state.piece == RingPiece.Gemtronic
     // While painting, nothing moves the ring through the view's update (that runs on hand
     // data), so it is placed here whenever the ring, the phase or the turn changes.
-    LaunchedEffect(rig, state.phase, state.turnYaw, state.turnPitch) {
+    LaunchedEffect(rig, state.phase, state.turnYaw, state.turnPitch, panelsYaw) {
         val ring = rig ?: return@LaunchedEffect
         if (state.phase == RingPhase.Painting) {
             ring.root.enabled = true
-            holdForPainting(ring.root, state.turnYaw, state.turnPitch)
+            holdForPainting(ring.root, stageRoot, panelsRoot, panelsYaw, state.turnYaw, state.turnPitch)
         } else if (state.phase != RingPhase.RingWorn) {
             ring.root.enabled = false
             ring.root.components[TransformComponent::class.java]?.setScaleVector(Vector3(1f, 1f, 1f))
@@ -182,8 +198,8 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         attachments = {
             AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, onEvent) }
             AttachmentPanel(GUIDE_PANEL_ID) {
-                if (isGemtronic) GestureGuide(state.activeFrame, onEvent)
-                else GeneratedGuide(state.paintable, onEvent)
+                if (isGemtronic) GestureGuide(state.activeFrame, state.ringScale, onEvent)
+                else GeneratedGuide(state.paintable, state.ringScale, onEvent)
             }
             AttachmentPanel(CONTROL_PANEL_ID) { ControlPanel(onEvent) }
         },
@@ -199,47 +215,76 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                     // Placed by the effect below: nothing here changes while painting.
                 } else {
                     ring.root.enabled = state.phase == RingPhase.RingWorn
-                    ring.root.components[TransformComponent::class.java]?.setScaleVector(Vector3(1f, 1f, 1f))
+                    // The rigs are built at 3x for the emulator; worn, the user sets the size.
+                    val size = state.ringScale / RIG_SCALE
+                    ring.root.components[TransformComponent::class.java]?.setScaleVector(Vector3(size, size, size))
                     if (hand != null) wearOnFinger(ring.root, stageRoot, hand, state.finger)
                 }
             }
         },
     ) { content, attachments ->
         content.addEntity(stageRoot)
+        content.addEntity(headProbe)
         attachments.entity(CENTER_PANEL_ID)?.apply {
             components[TransformComponent::class.java]?.setPosition(CENTER_PANEL_POSITION)
-            stageRoot.addChild(this)
+            panelsRoot.addChild(this)
         }
         attachments.entity(GUIDE_PANEL_ID)?.apply {
             components[TransformComponent::class.java]?.apply {
                 setPosition(GUIDE_PANEL_POSITION)
                 setQuaternion(GUIDE_PANEL_ROTATION)
             }
-            stageRoot.addChild(this)
+            panelsRoot.addChild(this)
         }
         attachments.entity(CONTROL_PANEL_ID)?.apply {
             components[TransformComponent::class.java]?.apply {
                 setPosition(CONTROL_PANEL_POSITION)
                 setQuaternion(CONTROL_PANEL_ROTATION)
             }
-            stageRoot.addChild(this)
+            panelsRoot.addChild(this)
         }
     }
 }
 
 private const val TURN_PER_PX = 0.4f
+private const val RECENTRE_DELAY_MS = 400L
+/** The panel positions above assume a head this high above the panels' frame. */
+private const val HEAD_HEIGHT_M = 1.5f
+/** RingRig and GeneratedRingRig build rings at this multiple of real size. */
+private const val RIG_SCALE = 3f
 private val PAINT_POSITION = Vector3(0.36f, 1.45f, -0.95f)
 private const val PAINT_SCALE = 3f
 
-/** Holds the ring still for painting, facing the user (looking through its hole, stone up). */
-private fun holdForPainting(ring: Entity, yawDeg: Float, pitchDeg: Float) {
+/**
+ * Holds the ring still for painting beside the panel, facing the user (looking through its
+ * hole, stone up). [PAINT_POSITION] is in the panels' frame, which follows the user.
+ */
+private fun holdForPainting(ring: Entity, stageRoot: Entity, panelsRoot: Entity, panelsYaw: Quat, yawDeg: Float, pitchDeg: Float) {
     val yaw = Quat(Vector3(0f, 1f, 0f), Math.toRadians(yawDeg.toDouble()).toFloat())
     val pitch = Quat(Vector3(1f, 0f, 0f), Math.toRadians(pitchDeg.toDouble()).toFloat())
     ring.components[TransformComponent::class.java]?.apply {
-        setPosition(PAINT_POSITION)
-        setQuaternion(pitch * yaw)
+        setPosition(stageRoot.convertPositionFrom(PAINT_POSITION, panelsRoot))
+        setQuaternion(panelsYaw * pitch * yaw)
         setScaleVector(Vector3(PAINT_SCALE, PAINT_SCALE, PAINT_SCALE))
     }
+}
+
+/**
+ * Puts the panels' frame where the user's head is, turned to where they face. Only the turn
+ * left and right is used, so panels stay upright. Panel positions are written for a head at
+ * [HEAD_HEIGHT_M], so the frame sits that far below the head. Returns the turn.
+ */
+private fun placeInFront(panelsRoot: Entity, stageRoot: Entity, headProbe: Entity): Quat {
+    val head = stageRoot.convertPositionFrom(Vector3(0f, 0f, 0f), headProbe)
+    val facing = stageRoot.convertRotationFrom(Quat(Vector3(0f, 1f, 0f), 0f), headProbe)
+    val forward = facing.rotateVector(Vector3(0f, 0f, -1f))
+    val turn = Quat(Vector3(0f, 1f, 0f), atan2(-forward.x, -forward.z))
+    panelsRoot.components[TransformComponent::class.java]?.apply {
+        setPosition(Vector3(head.x, head.y - HEAD_HEIGHT_M, head.z))
+        setQuaternion(turn)
+    }
+    Log.i(TAG, "panels placed in front: head=$head")
+    return turn
 }
 
 /** Centres the ring on the finger segment; the joint's own axes line up with the ring's. */

@@ -123,7 +123,7 @@ private fun ArrowButton(iconRes: Int, labelRes: Int, onClick: () -> Unit) {
 
 /** The right panel: the real ring's four gestures. */
 @Composable
-internal fun GestureGuide(frame: String?, onEvent: (RingWearEvent) -> Unit) {
+internal fun GestureGuide(frame: String?, ringScale: Float, onEvent: (RingWearEvent) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(PanelGap),
         modifier =
@@ -139,8 +139,12 @@ internal fun GestureGuide(frame: String?, onEvent: (RingWearEvent) -> Unit) {
         GuideLine(R.string.guide_open)
         GuideLine(R.string.guide_back)
         GuideLine(R.string.guide_click)
-        Button(onClick = { onEvent(RingWearEvent.ChangeFinger) }, colors = lightButton()) {
-            Text(stringResource(R.string.change_finger))
+        RingSizeRow(ringScale, onEvent)
+        Row(horizontalArrangement = Arrangement.spacedBy(PanelGap)) {
+            Button(onClick = { onEvent(RingWearEvent.ChangeFinger) }, colors = lightButton()) {
+                Text(stringResource(R.string.change_finger))
+            }
+            RecentreButton(onEvent)
         }
     }
 }

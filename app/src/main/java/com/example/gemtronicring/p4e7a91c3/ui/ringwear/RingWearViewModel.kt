@@ -1,5 +1,6 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemtronicring.p4e7a91c3.data.local.SessionStore
@@ -59,6 +60,7 @@ class RingWearViewModel(
 
     init {
         val saved = sessions.load()
+        log("start: ${if (saved == null) "no saved login" else "saved login for ${saved.name}"}")
         if (saved == null) {
             _state.update { it.copy(phase = RingPhase.Login) }
         } else {
@@ -69,10 +71,12 @@ class RingWearViewModel(
                 try {
                     server.me()
                 } catch (e: NotLoggedInException) {
+                    log("saved login rejected: ${e.message}")
                     signedOut(e.message)
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    log("could not check the saved login: ${reasonOf(e)}")
                 }
             }
         }
@@ -86,6 +90,12 @@ class RingWearViewModel(
                 viewModelScope.launch { runCatching { server.logOut() } }
                 signedOut(null)
             }
+            RingWearEvent.RecentrePanels -> _state.update { it.copy(recentre = it.recentre + 1) }
+            RingWearEvent.RingBigger ->
+                _state.update { it.copy(ringScale = (it.ringScale * SCALE_STEP).coerceAtMost(MAX_RING_SCALE)) }
+            RingWearEvent.RingSmaller ->
+                _state.update { it.copy(ringScale = (it.ringScale / SCALE_STEP).coerceAtLeast(MIN_RING_SCALE)) }
+            RingWearEvent.RingRealSize -> _state.update { it.copy(ringScale = 1f) }
             RingWearEvent.OpenLogin -> _state.update { it.copy(phase = RingPhase.Login, login = LoginUiState()) }
             RingWearEvent.StartSketch -> {
                 seed = Random.nextInt(0, Int.MAX_VALUE)
@@ -158,6 +168,7 @@ class RingWearViewModel(
         viewModelScope.launch {
             try {
                 val pieces = server.library()
+                log("gallery: ${pieces.size} pieces")
                 _state.update { it.copy(gallery = it.gallery.copy(pieces = pieces, loading = false)) }
                 pieces.take(GALLERY_SIZE).forEach { piece ->
                     val url = piece.pictureUrl ?: return@forEach
@@ -170,6 +181,7 @@ class RingWearViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                log("gallery failed: ${e.javaClass.simpleName}: ${reasonOf(e)}")
                 _state.update { it.copy(gallery = it.gallery.copy(loading = false, error = reasonOf(e))) }
             }
         }
@@ -181,6 +193,7 @@ class RingWearViewModel(
         viewModelScope.launch {
             try {
                 val file = modelFile(piece.id)
+                log("wear ${piece.name ?: piece.id}: ${if (file.exists()) "cached" else "downloading"}")
                 if (!file.exists()) server.download(piece.modelUrl, file)
                 _state.update {
                     it.copy(
@@ -196,6 +209,7 @@ class RingWearViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                log("wear failed: ${e.javaClass.simpleName}: ${reasonOf(e)}")
                 _state.update { it.copy(gallery = it.gallery.copy(opening = null, error = reasonOf(e))) }
             }
         }
@@ -213,12 +227,14 @@ class RingWearViewModel(
         viewModelScope.launch {
             try {
                 val session = call()
+                log("logged in as ${session.name}")
                 server.token = session.token
                 sessions.save(session)
                 _state.update { it.copy(user = session.name, login = LoginUiState(), phase = RingPhase.Home) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                log("log in or sign up failed: ${e.javaClass.simpleName}: ${reasonOf(e)}")
                 _state.update { it.copy(login = LoginUiState(error = reasonOf(e))) }
             }
         }
@@ -226,6 +242,7 @@ class RingWearViewModel(
 
     /** Forgets the login and shows the login panel, with [reason] if there is one. */
     private fun signedOut(reason: String?) {
+        log("signed out${reason?.let { ": $it" } ?: ""}")
         server.token = null
         sessions.clear()
         making3d?.cancel()
@@ -263,6 +280,7 @@ class RingWearViewModel(
         val started = System.currentTimeMillis()
         val options = _state.value.sketch
         try {
+            log("render requested (${options.material.id}, ${options.style.id}, ${options.view.id})")
             val image = server.render(
                     sketch,
                     options.material.id,
@@ -287,6 +305,7 @@ class RingWearViewModel(
         } catch (e: NotLoggedInException) {
             signedOut(e.message)
         } catch (e: Exception) {
+            log("render failed: ${e.javaClass.simpleName}: ${reasonOf(e)}")
             _state.update { it.copy(sketch = it.sketch.copy(error = reasonOf(e))) }
         } finally {
             _state.update { it.copy(sketch = it.sketch.copy(rendering = false)) }
@@ -313,6 +332,7 @@ class RingWearViewModel(
                     val material = _state.value.sketch.material
                     val id = server.start3d(render, "", material.id)
                     jobId = id
+                    log("3D job started: $id")
                     pendingName?.let { server.nameJob(id, it) }
                     var status: JobStatus = JobStatus.Running
                     while (status == JobStatus.Running) {
@@ -326,6 +346,7 @@ class RingWearViewModel(
                             val file = modelFile(id)
                             if (!file.exists()) server.download(result.modelUrl, file)
                             madePiece = RingPiece.Generated(file.absolutePath) to !material.metal
+                            log("3D job done, model saved")
                             wearIfReady()
                         }
                         is JobStatus.Failed -> fail3d(result.reason)
@@ -369,6 +390,7 @@ class RingWearViewModel(
     }
 
     private fun fail3d(reason: String) {
+        log("3D failed: $reason")
         _state.update { it.copy(phase = RingPhase.Sketching, sketch = it.sketch.copy(error = reason)) }
     }
 
@@ -397,6 +419,8 @@ class RingWearViewModel(
         _state.update { it.copy(activeFrame = navigate.frame(menu, cursor)) }
     }
 
+    private fun log(message: String) = Log.i(TAG, message)
+
     private fun reasonOf(e: Exception): String =
         when (e) {
             is java.net.ConnectException,
@@ -405,6 +429,10 @@ class RingWearViewModel(
         }
 
     companion object {
+        private const val TAG = "SketchOn"
+        private const val SCALE_STEP = 1.25f
+        private const val MIN_RING_SCALE = 0.5f
+        private const val MAX_RING_SCALE = 4f
         /** Pieces shown in the gallery, newest first. */
         const val GALLERY_SIZE = 8
         private const val POLL_INTERVAL_MS = 3_000L

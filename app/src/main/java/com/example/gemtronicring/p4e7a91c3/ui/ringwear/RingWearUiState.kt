@@ -18,6 +18,10 @@ data class RingWearUiState(
     val activeFrame: String? = null,
     val sketch: SketchUiState = SketchUiState(),
     val gallery: GalleryUiState = GalleryUiState(),
+    /** Bumped to bring the panels in front of the user again. */
+    val recentre: Int = 0,
+    /** Ring size when worn, as a multiple of real size. */
+    val ringScale: Float = 1f,
     /** The signed-in user's name, or null. */
     val user: String? = null,
     val login: LoginUiState = LoginUiState(),
@@ -69,6 +73,15 @@ sealed interface RingWearEvent {
     data class SignUp(val name: String, val password: String) : RingWearEvent
 
     data object LogOut : RingWearEvent
+
+    /** Puts the panels in front of the user, wherever they are looking. */
+    data object RecentrePanels : RingWearEvent
+
+    data object RingBigger : RingWearEvent
+
+    data object RingSmaller : RingWearEvent
+
+    data object RingRealSize : RingWearEvent
 
     /** From the home panel when no one is signed in. */
     data object OpenLogin : RingWearEvent

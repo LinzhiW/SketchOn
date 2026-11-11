@@ -67,6 +67,7 @@ import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.design.TextField
 import com.pico.spatial.ui.design.TextFieldDefaults
 import java.io.ByteArrayOutputStream
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -95,6 +96,29 @@ private const val NAME_LIMIT = 40
 /** The Gemtronic ring is the project author's own design. */
 private const val GEMTRONIC_AUTHOR = "Linzhi"
 private const val WHITE = 0xFFFFFFFF.toInt()
+
+/** Ring size when worn: smaller, bigger, or real size. Shared by both side panels. */
+@Composable
+internal fun RingSizeRow(ringScale: Float, onEvent: (RingWearEvent) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(SmallGap)) {
+        Label(stringResource(R.string.ring_size, (ringScale * 100).roundToInt()))
+        Row(horizontalArrangement = Arrangement.spacedBy(SmallGap)) {
+            Button(onClick = { onEvent(RingWearEvent.RingSmaller) }, colors = darkButtonColors()) { Text("−") }
+            Button(onClick = { onEvent(RingWearEvent.RingBigger) }, colors = darkButtonColors()) { Text("+") }
+            Button(onClick = { onEvent(RingWearEvent.RingRealSize) }, colors = darkButtonColors()) {
+                Text(stringResource(R.string.ring_real_size))
+            }
+        }
+    }
+}
+
+/** Brings the panels in front of the user. */
+@Composable
+internal fun RecentreButton(onEvent: (RingWearEvent) -> Unit) {
+    Button(onClick = { onEvent(RingWearEvent.RecentrePanels) }, colors = darkButtonColors()) {
+        Text(stringResource(R.string.recentre))
+    }
+}
 
 /** Log in or sign up. The gallery stays open to everyone. */
 @Composable
@@ -160,6 +184,7 @@ internal fun HomePanel(user: String?, onEvent: (RingWearEvent) -> Unit) {
         Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.home_gallery))
         }
+        RecentreButton(onEvent)
         if (user != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
                 Label(stringResource(R.string.home_signed_in, user))
@@ -381,6 +406,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 }
             }
             Body(statusText(sketch))
+            RecentreButton(onEvent)
             Section(R.string.sketch_help) {
                 ButtonRow(
                     listOf(
@@ -584,8 +610,11 @@ internal fun PaintingPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> U
                 )
             )
         }
-        Button(onClick = { onEvent(RingWearEvent.FinishPainting) }, colors = lightButtonColors()) {
-            Text(stringResource(R.string.wear_button))
+        Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
+            Button(onClick = { onEvent(RingWearEvent.FinishPainting) }, colors = lightButtonColors()) {
+                Text(stringResource(R.string.wear_button))
+            }
+            RecentreButton(onEvent)
         }
     }
 }
@@ -609,13 +638,14 @@ internal fun Making3dPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Un
 
 /** The right panel when wearing a made ring: it has no screen or gestures. */
 @Composable
-internal fun GeneratedGuide(paintable: Boolean, onEvent: (RingWearEvent) -> Unit) {
+internal fun GeneratedGuide(paintable: Boolean, ringScale: Float, onEvent: (RingWearEvent) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         modifier = Modifier.width(320.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
         Title(stringResource(R.string.generated_title))
         Body(stringResource(R.string.generated_body))
+        RingSizeRow(ringScale, onEvent)
         if (paintable) {
             Button(onClick = { onEvent(RingWearEvent.OpenPainting) }, colors = lightButtonColors()) {
                 Text(stringResource(R.string.generated_recolour))
