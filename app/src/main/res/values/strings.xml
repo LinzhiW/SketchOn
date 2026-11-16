@@ -114,9 +114,9 @@
     <string name="painting_parts_soon">Colouring the band and the decoration separately: coming soon.</string>
     <string name="painting_brush">Brush</string>
     <string name="painting_whole">Whole ring</string>
-    <string name="painting_brush_body">Pick a colour, then touch the ring with your index fingertip to paint where you touch.</string>
+    <string name="painting_brush_body">Touch the ring with your right index fingertip to paint. Pinch with your left hand and move it to turn the ring.</string>
     <string name="painting_clear">Wipe the paint off</string>
-    <string name="painting_controller_body">Hold the right trigger and touch the ring to paint. Touch a colour, the eraser or a brush size on the left controller\'s palette with the brush tip to choose it. Put the controllers down before you wear the ring.</string>
+    <string name="painting_controller_body">Point the right controller at the ring and hold the trigger to paint. Hold the left grip and move the left controller to turn the ring. Put the controllers down before you wear the ring.</string>
     <string name="painting_move_grip">Squeeze the right grip near the ring and move to carry it.</string>
     <string name="painting_move">Pinch the dot under the ring and drag it to move the ring.</string>
     <string name="painting_drag">Drag the ring itself to turn it, or use the buttons.</string>
@@ -139,4 +139,9 @@
     <string name="controllers_home_note">Draw with controllers or your hands. To wear a ring, put the controllers down: the headset only sees your hands once the controllers are set aside.</string>
     <string name="controllers_making_note">When it is ready you will wear it on your hand. Put the controllers down now so the headset can see your hands.</string>
     <string name="controllers_finger_note">Put the controllers down: the ring needs your bare hand.</string>
+    <string name="painting_pen">Paint</string>
+    <string name="painting_eraser">Erase</string>
+    <string name="painting_size">Brush size</string>
+    <string name="painting_size_small">Smaller brush</string>
+    <string name="painting_size_big">Bigger brush</string>
 </resources>

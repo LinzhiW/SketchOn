@@ -235,10 +235,10 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         state.moveX, state.moveY, state.moveZ, state.brush, state.brushAvailable,
     ) {
         val ring = rig ?: return@LaunchedEffect
-        // Draggable only while being coloured; worn, it must not catch the finger's taps.
-        // Not while painting with the fingertip either: touching the ring to paint it turned it.
-        val brushing = state.brush && state.brushAvailable
-        (ring as? GeneratedRingRig)?.setGrabbable(state.phase == RingPhase.Painting && !brushing)
+        // Takes the pointer only while being coloured; worn, it must not catch the finger's taps.
+        // While brushing it still takes it, so the system's ray stops on the ring instead of
+        // passing through; the drag below then leaves it alone (painting must not turn it).
+        (ring as? GeneratedRingRig)?.setGrabbable(state.phase == RingPhase.Painting)
         if (state.phase == RingPhase.Painting) {
             ring.root.enabled = true
             holdForPainting(
@@ -270,8 +270,10 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         if (state.brushClear > 0) (rig as? GeneratedRingRig)?.clearBrush()
     }
     val brushColor by rememberUpdatedState(state.brushColor)
-    // The controllers: the right one paints while its trigger is held, the left one carries
-    // the palette, and the right grip squeezed near the ring moves it.
+    val brushRadiusM by rememberUpdatedState(brushRadius(state.brushSize))
+    val erasing by rememberUpdatedState(state.erasing)
+    // The controllers: the right one paints where it points while its trigger is held, the
+    // left one turns the ring while its grip is held, and the right grip near the ring moves it.
     val controllers = remember { ControllerTrackingProvider() }
     val buttons = remember { LatestButtons() }
     DisposableEffect(controllers) {
@@ -284,18 +286,19 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         }
     }
     val kit = remember { ControllerBrush(stageRoot) }
-    var brushSize by remember { mutableStateOf(1) }
-    var erasing by remember { mutableStateOf(false) }
     LaunchedEffect(rig, brushReady, state.phase, state.brush) {
         val ring = rig as? GeneratedRingRig ?: return@LaunchedEffect
         if (!brushReady || !state.brush || state.phase != RingPhase.Painting) return@LaunchedEffect
-        Log.i(TAG, "brush on: right trigger, or the index fingertip without controllers")
+        Log.i(TAG, "brush on: right hand paints, left hand turns")
         var dirty = false
         var lastShown = 0L
         var lastLog = 0L
         var painted = 0
         var shown = 0
         var grabbedAt: Vector3? = null
+        // Where the left hand or controller was at the last step of a turn; null when not turning.
+        var turningFrom: Vector3? = null
+        var turns = 0
         var sawControllers = false
         try { while (true) {
             val d = currentData
@@ -308,26 +311,37 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             val right = pads?.right
             val pressed = buttons.latest?.right
             val mode = if (left != null || right != null) "controller" else "fingertip"
+            // The left hand turns the ring: grip held on the controller, or a pinch without one.
+            // Moving it sideways turns the ring round, up or down tips it.
+            val turnHand: Vector3? =
+                if (left != null) left.position.takeIf { (buttons.latest?.left?.gripValue ?: 0f) > GRIP_ON }
+                else d.left.tracked()?.takeIf { d.leftPinch?.let { p -> p.isReady && p.pinchValue > PINCH_ON } == true }
+                    ?.get(HandJoint.Index.INDEX_TIP)?.position
+            if (turnHand != null) {
+                val from = turningFrom
+                if (from != null) {
+                    val dx = turnHand.x - from.x
+                    val dy = turnHand.y - from.y
+                    if (dx != 0f || dy != 0f) {
+                        currentOnEvent(RingWearEvent.TurnRing(dx * TURN_PER_M, -dy * TURN_PER_M))
+                        turns++
+                    }
+                }
+                turningFrom = turnHand
+            } else {
+                turningFrom = null
+            }
             if (left != null || right != null) {
                 if (!sawControllers) {
                     sawControllers = true
                     currentOnEvent(RingWearEvent.ControllersSeen(true))
                 }
-                // Where the controller points on the ring: the system's own ray passes through
-                // the ring (it only stops at panels), so the brush finds the spot itself.
+                // Where the controller points on the ring: the brush finds the spot itself from
+                // the ring's own triangles, so it lands on the surface, not on the grab box.
                 val aimAt = right?.let { ring.rayHit(it.position, kit.forwardOf(it)) }
-                kit.show(left, right, brushColor, erasing, brushSize, aimAt)
-                when (val swatch = kit.touched(right)) {
-                    is Swatch.Colour -> {
-                        erasing = false
-                        currentOnEvent(RingWearEvent.PaintRing(swatch.argb))
-                    }
-                    Swatch.Eraser -> erasing = true
-                    is Swatch.Size -> brushSize = swatch.index
-                    null -> Unit
-                }
+                kit.show(right, brushColor, erasing, brushRadiusM, aimAt)
                 if (right != null && (pressed?.triggerValue ?: 0f) > TRIGGER_ON) {
-                    if (ring.brushAt(aimAt ?: kit.tipOf(right), ControllerBrush.SIZES_M[brushSize], brushColor, erasing)) {
+                    if (ring.brushAt(aimAt ?: kit.tipOf(right), brushRadiusM, brushColor, erasing)) {
                         dirty = true
                         painted++
                     }
@@ -349,9 +363,10 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                 }
             } else {
                 kit.hide()
-                hands.forEach { pose ->
+                // The right index fingertip paints; the left hand is for turning.
+                d.right.tracked()?.let { pose ->
                     val tip = pose[HandJoint.Index.INDEX_TIP].position
-                    if (ring.brushAt(tip, BRUSH_RADIUS_M, brushColor)) {
+                    if (ring.brushAt(tip, brushRadiusM, brushColor, erasing)) {
                         dirty = true
                         painted++
                     }
@@ -369,7 +384,8 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                 Log.i(
                     TAG,
                     "brush: $mode ${"%.3f".format(gap)} m from the ring, " +
-                        "$painted dabs, $shown uploads, trigger=${pressed?.triggerValue}, grip=${pressed?.gripValue}",
+                        "$painted dabs, $shown uploads, $turns turn steps, size ${"%.3f".format(brushRadiusM)} m, " +
+                        "trigger=${pressed?.triggerValue}, grip=${pressed?.gripValue}",
                 )
                 lastLog = now
             }
@@ -396,6 +412,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
     val context = LocalContext.current
     val currentPhase by rememberUpdatedState(state.phase)
     val currentRig by rememberUpdatedState(rig)
+    val currentlyBrushing by rememberUpdatedState(state.brush && state.brushAvailable)
     SpatialView(
         modifier =
             Modifier.fillMaxSize()
@@ -421,7 +438,8 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                         e != null
                     }
                 detectSpatialDragGesture(context = context, targetedToEntity = onRing) {
-                    if (currentPhase == RingPhase.Painting) {
+                    // While brushing, the right trigger on the ring paints; the left hand turns.
+                    if (currentPhase == RingPhase.Painting && !currentlyBrushing) {
                         currentOnEvent(
                             RingWearEvent.TurnRing(it.dragAmount.x * TURN_PER_PX, it.dragAmount.y * TURN_PER_PX)
                         )
@@ -467,7 +485,11 @@ private const val RIG_SCALE = 3f
 private val PAINT_POSITION = Vector3(0.22f, 1.25f, -0.45f)
 private const val PAINT_SCALE = 3f
 /** The brush's reach around the fingertip, in metres, on the ring held at [PAINT_SCALE]. */
-private const val BRUSH_RADIUS_M = 0.012f
+/** The brush's reach at each end of the panel's slider, in metres. */
+private const val BRUSH_MIN_M = 0.003f
+private const val BRUSH_MAX_M = 0.03f
+/** Degrees the ring turns per metre the left hand moves. */
+private const val TURN_PER_M = 600f
 private const val BRUSH_POLL_MS = 33L
 private const val TRIGGER_ON = 0.3f
 private const val GRIP_ON = 0.5f
@@ -630,3 +652,6 @@ private fun wearOnFinger(ring: Entity, parent: Entity, hand: HandPose, finger: W
         setQuaternion(parent.convertRotationFrom(hand[base].rotation, null))
     }
 }
+
+/** The brush's reach in metres for the slider's [size] (0 to 1). */
+internal fun brushRadius(size: Float): Float = BRUSH_MIN_M + (BRUSH_MAX_M - BRUSH_MIN_M) * size.coerceIn(0f, 1f)

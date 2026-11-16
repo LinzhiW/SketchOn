@@ -141,25 +141,84 @@ internal class GeneratedRingRig private constructor(
 
     override fun parts(): Int = materials.size.coerceAtLeast(1)
 
+    /** What takes the pointer: a box hugging the ring once its surface is read, else a sphere. */
+    private var hitBox: Entity? = null
+    private var hitBoxFitted = false
+
     /**
      * Grabbable only while it is being coloured. Worn, the ring sits on the finger that taps,
      * so its grab sphere took every tap and no window button could be pressed.
+     *
+     * A ring that can be brushed gets a box just around its surface, so the system's ray stops
+     * on the ring. (A sphere well beyond the ring made the ray stop in the air; no shape at all
+     * let it pass straight through, which looked as if the ring could not be hit.)
      */
     fun setGrabbable(grabbable: Boolean) {
-        val has = root.components[CollisionComponent::class.java] != null
-        if (grabbable == has) return
-        if (grabbable) {
-            root.components.set(InteractableComponent())
-            root.components.set(
-                CollisionComponent(
-                    collisionShape = listOf(ShapeResource.createSphere(GRAB_RADIUS_M)),
-                    physicsMaterial = PhysicsMaterialResource(),
+        val bounds = if (grabbable) boundsInRoot() else null
+        // Kept as it is, unless a sphere can now become the fitted box (the surface is read
+        // after the ring first shows).
+        if (grabbable && hitBox != null && (hitBoxFitted || bounds == null)) return
+        if (!grabbable && hitBox == null) return
+        hitBox?.destroy()
+        hitBox = null
+        hitBoxFitted = false
+        if (!grabbable) return
+        val box = Entity().apply {
+            components.set(InteractableComponent())
+            if (bounds != null) {
+                val (lo, hi) = bounds
+                components[TransformComponent::class.java]?.setPosition(
+                    Vector3((lo.x + hi.x) / 2f, (lo.y + hi.y) / 2f, (lo.z + hi.z) / 2f)
                 )
-            )
-        } else {
-            root.components.remove(CollisionComponent::class.java)
-            root.components.remove(InteractableComponent::class.java)
+                components.set(
+                    CollisionComponent(
+                        collisionShape = listOf(ShapeResource.createBox(Vector3(hi.x - lo.x, hi.y - lo.y, hi.z - lo.z))),
+                        physicsMaterial = PhysicsMaterialResource(),
+                    )
+                )
+            } else {
+                components.set(
+                    CollisionComponent(
+                        collisionShape = listOf(ShapeResource.createSphere(GRAB_RADIUS_M)),
+                        physicsMaterial = PhysicsMaterialResource(),
+                    )
+                )
+            }
         }
+        root.addChild(box)
+        hitBox = box
+        hitBoxFitted = bounds != null
+    }
+
+    /**
+     * The ring's surface as a box in the root's space (lowest and highest corner), or null
+     * before the brush has read the surface. The mesh's space is the root's moved, turned and
+     * scaled, so four points are enough to carry every corner over.
+     */
+    private fun boundsInRoot(): Pair<Vector3, Vector3>? {
+        val p = painter?.surface?.positions ?: return null
+        if (p.isEmpty()) return null
+        val o = root.convertPositionFrom(Vector3(0f, 0f, 0f), model)
+        val ex = root.convertPositionFrom(Vector3(1f, 0f, 0f), model).let { Vector3(it.x - o.x, it.y - o.y, it.z - o.z) }
+        val ey = root.convertPositionFrom(Vector3(0f, 1f, 0f), model).let { Vector3(it.x - o.x, it.y - o.y, it.z - o.z) }
+        val ez = root.convertPositionFrom(Vector3(0f, 0f, 1f), model).let { Vector3(it.x - o.x, it.y - o.y, it.z - o.z) }
+        val lo = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE)
+        val hi = floatArrayOf(-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+        var i = 0
+        while (i < p.size) {
+            val x = p[i]; val y = p[i + 1]; val z = p[i + 2]
+            val q = floatArrayOf(
+                o.x + ex.x * x + ey.x * y + ez.x * z,
+                o.y + ex.y * x + ey.y * y + ez.y * z,
+                o.z + ex.z * x + ey.z * y + ez.z * z,
+            )
+            for (k in 0..2) {
+                if (q[k] < lo[k]) lo[k] = q[k]
+                if (q[k] > hi[k]) hi[k] = q[k]
+            }
+            i += 3
+        }
+        return Vector3(lo[0], lo[1], lo[2]) to Vector3(hi[0], hi[1], hi[2])
     }
 
     /** Colours one part (0 band, 1 decoration) of the ring. */

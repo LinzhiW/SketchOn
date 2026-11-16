@@ -31,11 +31,15 @@ test("a model that has its materials keeps them", () => {
   assert.deepEqual(json.materials, [{ name: "tripo" }]);
 });
 
-test("metal prompts add a stone only when drawn, and no view names one", () => {
-  for (const view of ["front", "top", "side"]) {
-    const { prompt } = buildInput({ sketch: SKETCH, material: "gold", view });
-    assert.match(prompt, /only where the drawing clearly shows one/);
-    assert.doesNotMatch(prompt, /\bstone on top\b|defines the stone|stone sits/);
+test("metal prompts never name a stone, so the model is not led to draw one", () => {
+  for (const material of ["gold", "silver", "rose", "platinum"]) {
+    for (const view of ["front", "top", "side"]) {
+      for (const style of ["refined", "cute", "vintage", "minimal", "bold"]) {
+        const { prompt } = buildInput({ sketch: SKETCH, material, view, style });
+        assert.match(prompt, /one solid piece of this metal/);
+        assert.doesNotMatch(prompt, /stone|diamond|gem|jewel|crystal/i);
+      }
+    }
   }
 });
 

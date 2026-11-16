@@ -13,7 +13,7 @@ import kotlin.math.sqrt
  * That point is found from the triangle the pixel belongs to, so a dab across a seam in the
  * texture (where the ring's surface is cut apart to lie flat) still paints both sides.
  */
-internal class SurfacePainter(private val surface: RingSurface) {
+internal class SurfacePainter(val surface: RingSurface) {
     val width = surface.texture.width
     val height = surface.texture.height
     private val original = IntArray(width * height).also { surface.texture.getPixels(it, 0, width, 0, 0, width, height) }

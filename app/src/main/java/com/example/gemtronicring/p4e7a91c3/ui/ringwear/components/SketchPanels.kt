@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -64,9 +65,16 @@ import com.example.gemtronicring.p4e7a91c3.ui.ringwear.SketchUiState
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearUiState
 import androidx.compose.foundation.gestures.detectDragGestures
 import com.example.gemtronicring.p4e7a91c3.ui.theme.GemtronicColors
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.res.painterResource
 import com.pico.spatial.ui.design.Button
 import com.pico.spatial.ui.design.ButtonDefaults
+import com.pico.spatial.ui.design.Icon
+import com.pico.spatial.ui.design.IconButton
+import com.pico.spatial.ui.design.IconButtonDefaults
 import com.pico.spatial.ui.design.PicoTheme
+import com.pico.spatial.ui.design.Slider
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.design.TextField
 import com.pico.spatial.ui.design.TextFieldDefaults
@@ -84,7 +92,9 @@ private val LeftWidth = 616.dp
 private val RightWidth = 440.dp
 private val SectionGap = 12.dp
 private val CardSize = 150.dp
-private val ViewPictureSize = 56.dp
+private val ViewPictureSize = 120.dp
+private val ToolButtonSize = 64.dp
+private val SliderWidth = 260.dp
 private val ColourHeight = 150.dp
 private val Gap = 16.dp
 private val SmallGap = 8.dp
@@ -372,7 +382,11 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
         modifier = Modifier.background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(Gap), modifier = Modifier.width(LeftWidth)) {
-            Title(stringResource(R.string.sketch_title))
+            // Back at the top left, where a way out is looked for first.
+            Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
+                BackButton(onEvent)
+                Title(stringResource(R.string.sketch_title))
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
                 Canvas(
                     modifier =
@@ -432,38 +446,26 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 }
                 RenderView(sketch)
             }
-            ButtonRow(
-                listOf(
-                    Triple(R.string.sketch_pen, !erasing) { erasing = false },
-                    Triple(R.string.sketch_eraser, erasing) { erasing = true },
-                )
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
-                BackButton(onEvent)
-                Button(
-                    onClick = {
-                        val before = past.removeLastOrNull()
-                        if (before != null) {
-                            strokes.clear()
-                            strokes.addAll(before)
-                            send()
-                        }
-                    },
-                    colors = darkButtonColors(),
-                ) {
-                    Text(stringResource(R.string.sketch_undo))
-                }
-                Button(
-                    onClick = {
-                        if (strokes.isNotEmpty()) keepForUndo()
+            // Pen and eraser (one is chosen), then undo and clear, as icons: fewer words.
+            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+                ToolButton(R.drawable.ic_pen, R.string.sketch_pen, chosen = !erasing) { erasing = false }
+                ToolButton(R.drawable.ic_eraser, R.string.sketch_eraser, chosen = erasing) { erasing = true }
+                Spacer(Modifier.width(Gap))
+                ToolButton(R.drawable.ic_undo, R.string.sketch_undo) {
+                    val before = past.removeLastOrNull()
+                    if (before != null) {
                         strokes.clear()
-                        current.clear()
+                        strokes.addAll(before)
                         send()
-                    },
-                    colors = darkButtonColors(),
-                ) {
-                    Text(stringResource(R.string.sketch_clear))
+                    }
                 }
+                ToolButton(R.drawable.ic_clear, R.string.sketch_clear) {
+                    if (strokes.isNotEmpty()) keepForUndo()
+                    strokes.clear()
+                    current.clear()
+                    send()
+                }
+                Spacer(Modifier.width(Gap))
                 Button(
                     onClick = { onEvent(RingWearEvent.Make3d) },
                     enabled = sketch.render != null && !sketch.rendering,
@@ -531,6 +533,18 @@ private fun Section(labelRes: Int, modifier: Modifier = Modifier, content: @Comp
     }
 }
 
+/** An icon button; a chosen one (the pen or the eraser in use) is lilac. */
+@Composable
+private fun ToolButton(iconRes: Int, labelRes: Int, chosen: Boolean = false, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        size = IconButtonDefaults.iconButtonSize(ToolButtonSize),
+        colors = if (chosen) chosenButtonColors() else darkButtonColors(),
+    ) {
+        Icon(painter = painterResource(iconRes), contentDescription = stringResource(labelRes))
+    }
+}
+
 /** Buttons as (label, chosen, action); the chosen ones are lilac. */
 @Composable
 private fun ButtonRow(buttons: List<Triple<Int, Boolean, () -> Unit>>) {
@@ -558,21 +572,25 @@ private fun ViewPicker(chosen: SketchView, onPick: (SketchView) -> Unit) {
                 .getOrNull()
         }
     }
+    // The pictures are the buttons; the chosen one has a lilac frame. (Words under them only
+    // repeated what the pictures show.)
     Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
         SketchView.entries.forEach { view ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SmallGap)) {
+            val frame = if (view == chosen) GemtronicColors.accentLilac else Color.Transparent
+            Box(
+                modifier =
+                    Modifier.size(ViewPictureSize)
+                        .clip(SquareShape)
+                        .border(4.dp, frame, SquareShape)
+                        .background(Dim)
+                        .clickable { onPick(view) },
+            ) {
                 pictures[view]?.let {
                     Image(
                         bitmap = it,
                         contentDescription = stringResource(viewLabel(view)),
-                        modifier = Modifier.size(ViewPictureSize).clip(SquareShape),
+                        modifier = Modifier.fillMaxSize().padding(6.dp).clip(SquareShape),
                     )
-                }
-                Button(
-                    onClick = { onPick(view) },
-                    colors = if (view == chosen) chosenButtonColors() else darkButtonColors(),
-                ) {
-                    Text(stringResource(viewLabel(view)))
                 }
             }
         }
@@ -684,6 +702,24 @@ internal fun PaintingPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> U
         Section(R.string.sketch_color) {
             ColorWheel(current) { onEvent(RingWearEvent.PaintRing(it)) }
         }
+        if (brushing) {
+            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+                ToolButton(R.drawable.ic_pen, R.string.painting_pen, chosen = !state.erasing) { onEvent(RingWearEvent.SetErasing(false)) }
+                ToolButton(R.drawable.ic_eraser, R.string.painting_eraser, chosen = state.erasing) { onEvent(RingWearEvent.SetErasing(true)) }
+            }
+            Section(R.string.painting_size) {
+                // A small dot and a big one either side of the slider show which way is bigger.
+                Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(light()))
+                    Slider(
+                        value = state.brushSize,
+                        onValueChange = { onEvent(RingWearEvent.SetBrushSize(it)) },
+                        modifier = Modifier.width(SliderWidth),
+                    )
+                    Box(Modifier.size(28.dp).clip(RoundedCornerShape(14.dp)).background(light()))
+                }
+            }
+        }
         if (state.brushAvailable) {
             Button(onClick = { onEvent(RingWearEvent.ClearBrush) }, colors = darkButtonColors()) {
                 Text(stringResource(R.string.painting_clear))
@@ -691,7 +727,8 @@ internal fun PaintingPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> U
         }
         Label(stringResource(if (state.controllersSeen) R.string.painting_move_grip else R.string.painting_move))
         Section(R.string.painting_turn) {
-            Body(stringResource(R.string.painting_drag))
+            // While brushing, a drag on the ring paints; the left hand turns it instead.
+            if (!brushing) Body(stringResource(R.string.painting_drag))
             ButtonRow(
                 listOf(
                     Triple(R.string.painting_left, false) { onEvent(RingWearEvent.TurnRing(-45f, 0f)) },

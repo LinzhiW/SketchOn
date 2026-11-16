@@ -50,9 +50,13 @@ export const VIEWS = {
   side: "seen from the side at a slant, so the round opening shows as a narrow upright oval; the drawing defines the band's thickness and how high anything on top sits",
 };
 
-/** Metal rings got a diamond whether drawn or not. A stone only comes from the drawing. */
+/**
+ * Metal rings kept coming back with a diamond. Telling the model "no diamond" did not help: a
+ * small image model reads the word and draws one. So the rule never names a stone; it says
+ * the whole ring, and whatever is drawn on top of the band, is the one metal.
+ */
 const METAL_RULE =
-  "Add a gemstone or diamond only where the drawing clearly shows one; otherwise the ring is plain metal with no stones. ";
+  "The whole ring is one solid piece of this metal: anything drawn on top of the band is shaped in the same metal, with the same polish. ";
 
 const MAX_SKETCH_BYTES = 2 * 1024 * 1024;
 const SKETCH_PREFIX = /^data:image\/(png|jpeg|webp);base64,/;

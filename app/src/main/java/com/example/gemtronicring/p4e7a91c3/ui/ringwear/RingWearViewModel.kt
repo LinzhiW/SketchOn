@@ -130,7 +130,8 @@ class RingWearViewModel(
                 _state.update {
                     when {
                         !it.paintable -> it
-                        it.brush && it.brushAvailable -> it.copy(brushColor = event.color)
+                        // Picking a colour means painting with it, so the eraser goes off.
+                        it.brush && it.brushAvailable -> it.copy(brushColor = event.color, erasing = false)
                         else -> it.copy(paints = (0 until it.parts).associateWith { event.color })
                     }
                 }
@@ -138,6 +139,8 @@ class RingWearViewModel(
             is RingWearEvent.ControllersSeen -> _state.update { it.copy(controllersSeen = event.seen) }
             is RingWearEvent.BrushAvailable -> _state.update { it.copy(brushAvailable = event.available) }
             RingWearEvent.ClearBrush -> _state.update { it.copy(brushClear = it.brushClear + 1, paints = emptyMap()) }
+            is RingWearEvent.SetBrushSize -> _state.update { it.copy(brushSize = event.size.coerceIn(0f, 1f)) }
+            is RingWearEvent.SetErasing -> _state.update { it.copy(erasing = event.on) }
             is RingWearEvent.MoveRing ->
                 _state.update {
                     it.copy(

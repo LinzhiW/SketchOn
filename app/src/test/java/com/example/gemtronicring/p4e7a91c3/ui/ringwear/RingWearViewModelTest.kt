@@ -413,4 +413,35 @@ class RingWearViewModelTest {
         hand(0f, 100)
         assertEquals(RingPhase.TrackingUnavailable, viewModel.state.value.phase)
     }
+
+    @Test
+    fun `the brush size follows the slider and stays between 0 and 1`() {
+        viewModel.onEvent(RingWearEvent.SetBrushSize(0.8f))
+        assertEquals(0.8f, viewModel.state.value.brushSize, 1e-6f)
+        viewModel.onEvent(RingWearEvent.SetBrushSize(3f))
+        assertEquals(1f, viewModel.state.value.brushSize, 1e-6f)
+        viewModel.onEvent(RingWearEvent.SetBrushSize(-1f))
+        assertEquals(0f, viewModel.state.value.brushSize, 1e-6f)
+    }
+
+    @Test
+    fun `picking a colour while erasing goes back to painting`() = runTest(dispatcher) {
+        // A clay ring, the kind that is painted.
+        viewModel.onEvent(RingWearEvent.StartSketch)
+        viewModel.onEvent(RingWearEvent.ChooseMaterial(Material.Clay))
+        viewModel.onEvent(RingWearEvent.SketchChanged("a"))
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.Make3d)
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.ConfirmMake3d("Clay Ring"))
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.paintable)
+        viewModel.onEvent(RingWearEvent.BrushAvailable(true))
+        viewModel.onEvent(RingWearEvent.SetBrush(true))
+        viewModel.onEvent(RingWearEvent.SetErasing(true))
+        assertTrue(viewModel.state.value.erasing)
+        viewModel.onEvent(RingWearEvent.PaintRing(0xFF0090FF.toInt()))
+        assertEquals(false, viewModel.state.value.erasing)
+        assertEquals(0xFF0090FF.toInt(), viewModel.state.value.brushColor)
+    }
 }

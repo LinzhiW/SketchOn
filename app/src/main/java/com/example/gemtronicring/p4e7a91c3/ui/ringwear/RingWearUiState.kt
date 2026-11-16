@@ -46,6 +46,10 @@ data class RingWearUiState(
     val controllersSeen: Boolean = false,
     /** The brush's colour, as ARGB. */
     val brushColor: Int = 0xFFE5484D.toInt(),
+    /** The brush's size on the panel's slider, 0 (finest) to 1 (broadest). */
+    val brushSize: Float = DEFAULT_BRUSH_SIZE,
+    /** True while the brush wipes paint off instead of adding it. */
+    val erasing: Boolean = false,
     /** Bumped to wipe the brush strokes off. */
     val brushClear: Int = 0,
     /** How far the user has moved the ring from where it is held for painting, in metres. */
@@ -139,6 +143,12 @@ sealed interface RingWearEvent {
     /** Wipes the brush strokes off. */
     data object ClearBrush : RingWearEvent
 
+    /** The brush size from the panel's slider, 0 to 1. */
+    data class SetBrushSize(val size: Float) : RingWearEvent
+
+    /** Paint (false) or wipe paint off (true) with the brush. */
+    data class SetErasing(val on: Boolean) : RingWearEvent
+
     /** The controllers were seen while painting, so the panel explains them. */
     data class ControllersSeen(val seen: Boolean) : RingWearEvent
 
@@ -200,3 +210,6 @@ sealed interface RingWearEvent {
 
     data object TrackingDenied : RingWearEvent
 }
+
+/** Where the brush size slider starts: about a 1 cm brush. */
+const val DEFAULT_BRUSH_SIZE = 0.3f
