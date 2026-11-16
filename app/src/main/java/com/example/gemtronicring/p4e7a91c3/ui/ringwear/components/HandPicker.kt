@@ -79,7 +79,7 @@ internal fun HandPicker(selected: WornFinger, onSelect: (WornFinger) -> Unit) {
 
 @Composable
 private fun HandFinger(spot: FingerSpot, selected: Boolean, onClick: () -> Unit) {
-    val fill = if (selected) PicoTheme.colorScheme.labelPrimaryLight else GemtronicColors.handSkin
+    val fill = if (selected) GemtronicColors.accentLilac else GemtronicColors.handSkin
     val label = stringResource(spot.labelRes)
     Box(
         Modifier.offset(spot.x, spot.y)

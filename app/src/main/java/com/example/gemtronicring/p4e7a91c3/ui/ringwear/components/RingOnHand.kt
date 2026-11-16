@@ -31,6 +31,22 @@ import com.pico.spatial.tracking.hand.HandPose
 import com.pico.spatial.tracking.hand.HandTrackingData
 import com.pico.spatial.tracking.hand.HandTrackingProvider
 import com.pico.spatial.ui.foundation.content.SpatialView
+import com.pico.spatial.ui.platform.LocalStageUpperLimbRenderModelManager
+import com.pico.spatial.ui.platform.LocalPhysicalLengthConverter
+import com.pico.spatial.tracking.controller.ControllerActionData
+import com.pico.spatial.tracking.controller.ControllerTrackingProvider
+import com.pico.spatial.ui.platform.LengthUnit
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import com.pico.spatial.core.ecs.CollisionComponent
+import com.pico.spatial.core.ecs.InteractableComponent
+import com.pico.spatial.core.ecs.ModelComponent
+import com.pico.spatial.core.ecs.resource.MeshResource
+import com.pico.spatial.core.ecs.resource.PhysicsMaterialResource
+import com.pico.spatial.core.ecs.resource.ShapeResource
+import com.pico.spatial.core.ecs.resource.UnlitMaterial
+import com.pico.spatial.core.math.Color4
+import com.pico.spatial.ui.platform.ability.UpperLimbRenderMode
 import com.pico.spatial.ui.foundation.gesture.TargetEntity
 import com.pico.spatial.ui.foundation.gesture.detectSpatialDragGesture
 import androidx.compose.ui.input.pointer.pointerInput
@@ -40,16 +56,8 @@ import kotlin.math.atan2
 import kotlin.math.sqrt
 
 private const val TAG = "SketchOn"
-private const val CENTER_PANEL_ID = "center-panel"
-private const val GUIDE_PANEL_ID = "gesture-guide"
-private const val CONTROL_PANEL_ID = "control-panel"
 private const val HAND_LOST_DELAY_MS = 300L
 
-private val CENTER_PANEL_POSITION = Vector3(0f, 1.5f, -0.8f)
-private val GUIDE_PANEL_POSITION = Vector3(0.34f, 1.5f, -0.85f)
-private val GUIDE_PANEL_ROTATION = Quat(Vector3(0f, 1f, 0f), -0.38f)
-private val CONTROL_PANEL_POSITION = Vector3(-0.34f, 1.5f, -0.85f)
-private val CONTROL_PANEL_ROTATION = Quat(Vector3(0f, 1f, 0f), 0.38f)
 private val RING_RIGHT_AXIS = Vector3(1f, 0f, 0f)
 
 /** The first segment of a finger, where a ring sits. */
@@ -121,17 +129,21 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         }
     }
 
-    val drafts = remember { TextDrafts() }
-    // A new drawing gets a new name; a password is not kept once signed in.
-    LaunchedEffect(state.phase) {
-        if (state.phase == RingPhase.Sketching) drafts.pieceName = ""
-        if (state.user != null) drafts.loginPassword = ""
+    // The headset draws the real hand, cut out of the camera image, over everything in the stage
+    // (Visible mode). A worn ring then sat behind the finger, faint at the cut's soft edge. While
+    // the ring is on, the real hand is not drawn over it; elsewhere the system's choice stands.
+    val limbs = LocalStageUpperLimbRenderModelManager.current
+    val ringOnHand = state.phase == RingPhase.RingWorn || state.phase == RingPhase.HandSearching
+    LaunchedEffect(ringOnHand) {
+        val mode = if (ringOnHand) UpperLimbRenderMode.Hidden else UpperLimbRenderMode.Default
+        Log.i(TAG, "real hand drawing: $mode -> ${limbs.setUpperLimbRenderMode(mode)}")
     }
+    DisposableEffect(Unit) { onDispose { limbs.setUpperLimbRenderMode(UpperLimbRenderMode.Default) } }
+
     var rig by remember { mutableStateOf<WornRing?>(null) }
     val stageRoot = remember { Entity() }
-    // The panels hang from this, placed in front of the user (see recentre below). On a headset
-    // the stage's origin is not where the user's head is, so fixed positions put panels out of
-    // sight; the emulator happened to match.
+    // The panels live in a system window now; this frame, placed in front of the user at each
+    // step, is where the ring is held up for painting.
     val panelsRoot = remember { Entity().also { stageRoot.addChild(it) } }
     var panelsYaw by remember { mutableStateOf(Quat(Vector3(0f, 1f, 0f), 0f)) }
     // The headset's own pose, in world space (only reported in full space).
@@ -208,14 +220,23 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             }
             .onFailure { Log.e(TAG, "Could not load the ring", it) }
     }
-    val isGemtronic = state.piece == RingPiece.Gemtronic
     // While painting, nothing moves the ring through the view's update (that runs on hand
     // data), so it is placed here whenever the ring, the phase or the turn changes.
-    LaunchedEffect(rig, state.phase, state.turnYaw, state.turnPitch, panelsYaw) {
+    LaunchedEffect(
+        rig, state.phase, state.turnYaw, state.turnPitch, panelsYaw,
+        state.moveX, state.moveY, state.moveZ, state.brush, state.brushAvailable,
+    ) {
         val ring = rig ?: return@LaunchedEffect
+        // Draggable only while being coloured; worn, it must not catch the finger's taps.
+        // Not while painting with the fingertip either: touching the ring to paint it turned it.
+        val brushing = state.brush && state.brushAvailable
+        (ring as? GeneratedRingRig)?.setGrabbable(state.phase == RingPhase.Painting && !brushing)
         if (state.phase == RingPhase.Painting) {
             ring.root.enabled = true
-            holdForPainting(ring.root, stageRoot, panelsRoot, panelsYaw, state.turnYaw, state.turnPitch)
+            holdForPainting(
+                ring.root, stageRoot, panelsRoot, panelsYaw, state.turnYaw, state.turnPitch,
+                Vector3(state.moveX, state.moveY, state.moveZ),
+            )
         } else if (state.phase != RingPhase.RingWorn) {
             ring.root.enabled = false
             ring.root.components[TransformComponent::class.java]?.setScaleVector(Vector3(1f, 1f, 1f))
@@ -226,12 +247,155 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         state.paints.forEach { (part, colour) -> ring.paint(part, colour) }
     }
 
+    // The brush: while colouring, the index fingertip paints wherever it touches the ring.
+    var brushReady by remember { mutableStateOf(false) }
+    LaunchedEffect(rig, state.paintable) {
+        brushReady = false
+        currentOnEvent(RingWearEvent.BrushAvailable(false))
+        val ring = rig as? GeneratedRingRig ?: return@LaunchedEffect
+        if (!state.paintable) return@LaunchedEffect
+        ring.prepareBrush()
+        brushReady = ring.brushable
+        currentOnEvent(RingWearEvent.BrushAvailable(brushReady))
+    }
+    LaunchedEffect(rig, state.brushClear) {
+        if (state.brushClear > 0) (rig as? GeneratedRingRig)?.clearBrush()
+    }
+    val brushColor by rememberUpdatedState(state.brushColor)
+    // The controllers: the right one paints while its trigger is held, the left one carries
+    // the palette, and the right grip squeezed near the ring moves it.
+    val controllers = remember { ControllerTrackingProvider() }
+    val buttons = remember { LatestButtons() }
+    DisposableEffect(controllers) {
+        val listener = ControllerTrackingProvider.ControllerActionListener { buttons.latest = it }
+        controllers.addControllerActionListener(listener)
+        controllers.start()
+        onDispose {
+            controllers.removeControllerActionListener(listener)
+            controllers.stop()
+        }
+    }
+    val kit = remember { ControllerBrush(stageRoot) }
+    var brushSize by remember { mutableStateOf(1) }
+    var erasing by remember { mutableStateOf(false) }
+    LaunchedEffect(rig, brushReady, state.phase, state.brush) {
+        val ring = rig as? GeneratedRingRig ?: return@LaunchedEffect
+        if (!brushReady || !state.brush || state.phase != RingPhase.Painting) return@LaunchedEffect
+        Log.i(TAG, "brush on: right trigger, or the index fingertip without controllers")
+        var dirty = false
+        var lastShown = 0L
+        var lastLog = 0L
+        var painted = 0
+        var shown = 0
+        var grabbedAt: Vector3? = null
+        var sawControllers = false
+        try { while (true) {
+            val d = currentData
+            var gap = Float.NaN
+            val pads = runCatching { controllers.latestData }.getOrNull()
+            val left = pads?.left
+            val right = pads?.right
+            val pressed = buttons.latest?.right
+            if (left != null || right != null) {
+                if (!sawControllers) {
+                    sawControllers = true
+                    currentOnEvent(RingWearEvent.ControllersSeen(true))
+                }
+                kit.show(left, right, brushColor, erasing, brushSize)
+                when (val swatch = kit.touched(right)) {
+                    is Swatch.Colour -> {
+                        erasing = false
+                        currentOnEvent(RingWearEvent.PaintRing(swatch.argb))
+                    }
+                    Swatch.Eraser -> erasing = true
+                    is Swatch.Size -> brushSize = swatch.index
+                    null -> Unit
+                }
+                if (right != null && (pressed?.triggerValue ?: 0f) > TRIGGER_ON) {
+                    if (ring.brushAt(kit.tipOf(right), ControllerBrush.SIZES_M[brushSize], brushColor, erasing)) {
+                        dirty = true
+                        painted++
+                    }
+                    gap = ring.lastGapM
+                }
+                // Grip squeezed near the ring: the ring follows the controller until let go.
+                if (right != null && (pressed?.gripValue ?: 0f) > GRIP_ON) {
+                    val at = stageRoot.convertPositionFrom(right.position, null)
+                    val from = grabbedAt
+                    if (from != null) {
+                        currentOnEvent(RingWearEvent.MoveRing(at.x - from.x, at.y - from.y, at.z - from.z))
+                        grabbedAt = at
+                    } else {
+                        val centre = ring.root.components[TransformComponent::class.java]?.position
+                        if (centre != null && distance(at, centre) < GRAB_REACH_M) grabbedAt = at
+                    }
+                } else {
+                    grabbedAt = null
+                }
+            } else {
+                kit.hide()
+                listOfNotNull(d.right, d.left).forEach { pose ->
+                    val tip = pose[HandJoint.Index.INDEX_TIP].position
+                    if (ring.brushAt(tip, BRUSH_RADIUS_M, brushColor)) {
+                        dirty = true
+                        painted++
+                    }
+                    if (!(ring.lastGapM >= gap)) gap = ring.lastGapM
+                }
+            }
+            val now = SystemClock.elapsedRealtime()
+            if (dirty && now - lastShown >= BRUSH_SHOW_MS) {
+                ring.showBrush()
+                shown++
+                dirty = false
+                lastShown = now
+            }
+            if (now - lastLog >= BRUSH_LOG_MS) {
+                Log.i(
+                    TAG,
+                    "brush: ${if (sawControllers) "controller" else "fingertip"} ${"%.3f".format(gap)} m from the ring, " +
+                        "$painted dabs, $shown uploads, trigger=${pressed?.triggerValue}, grip=${pressed?.gripValue}",
+                )
+                lastLog = now
+            }
+            delay(BRUSH_POLL_MS)
+        } } finally {
+            kit.hide()
+        }
+    }
+
+    // A small dot under the ring held for painting: pinch it and drag to move the ring.
+    val handle = remember { makeHandle().also { stageRoot.addChild(it) } }
+    LaunchedEffect(rig, state.phase, state.turnYaw, state.turnPitch, panelsYaw, state.moveX, state.moveY, state.moveZ) {
+        val ring = rig
+        handle.enabled = ring != null && state.phase == RingPhase.Painting
+        if (ring == null || state.phase != RingPhase.Painting) return@LaunchedEffect
+        val at = ring.root.components[TransformComponent::class.java]?.position ?: return@LaunchedEffect
+        handle.components[TransformComponent::class.java]?.setPosition(Vector3(at.x, at.y - HANDLE_BELOW_M, at.z))
+    }
+    val converter = LocalPhysicalLengthConverter.current
+    val density = LocalDensity.current
+    // Metres per pixel of drag in this view.
+    val metresPerPx = remember(converter, density) { converter.dpToLength(1.dp, LengthUnit.Meters) / density.density }
+
     val context = LocalContext.current
     val currentPhase by rememberUpdatedState(state.phase)
     val currentRig by rememberUpdatedState(rig)
     SpatialView(
         modifier =
-            Modifier.fillMaxSize().pointerInput(Unit) {
+            Modifier.fillMaxSize()
+                .pointerInput(Unit) {
+                    // Dragging the dot moves the ring. The view's y runs down, the stage's up.
+                    detectSpatialDragGesture(context = context, targetedToEntity = TargetEntity.any { it == handle }) {
+                        if (currentPhase == RingPhase.Painting) {
+                            val m = metresPerPx
+                            currentOnEvent(
+                                RingWearEvent.MoveRing(it.dragAmount.x * m, -it.dragAmount.y * m, it.dragAmount.z * m)
+                            )
+                        }
+                    }
+                }
+                .pointerInput(Unit) {
                 // Dragging the ring itself turns it while it is being coloured.
                 // Only the ring itself: drags on the panels (the drawing canvas) must stay theirs.
                 val onRing =
@@ -249,22 +413,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                     }
                 }
             },
-        attachments = {
-            AttachmentPanel(CENTER_PANEL_ID) { CenterPanel(state, drafts, onEvent) }
-            AttachmentPanel(GUIDE_PANEL_ID) {
-                if (isGemtronic) GestureGuide(state.activeFrame, state.ringScale, onEvent)
-                else GeneratedGuide(state.paintable, state.ringScale, onEvent)
-            }
-            AttachmentPanel(CONTROL_PANEL_ID) { ControlPanel(onEvent) }
-        },
-        update = { _, attachments ->
-            // Signing in has its own system window.
-            attachments.entity(CENTER_PANEL_ID)?.enabled =
-                state.phase != RingPhase.RingWorn && state.phase != RingPhase.Login
-            val ringInUse =
-                state.phase == RingPhase.HandSearching || state.phase == RingPhase.RingWorn
-            attachments.entity(GUIDE_PANEL_ID)?.enabled = ringInUse
-            attachments.entity(CONTROL_PANEL_ID)?.enabled = ringInUse && isGemtronic
+        update = { _, _ ->
             rig?.let { ring ->
                 ring.showFrame(state.activeFrame)
                 if (state.phase == RingPhase.Painting) {
@@ -278,26 +427,8 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                 }
             }
         },
-    ) { content, attachments ->
+    ) { content, _ ->
         content.addEntity(stageRoot)
-        attachments.entity(CENTER_PANEL_ID)?.apply {
-            components[TransformComponent::class.java]?.setPosition(CENTER_PANEL_POSITION)
-            panelsRoot.addChild(this)
-        }
-        attachments.entity(GUIDE_PANEL_ID)?.apply {
-            components[TransformComponent::class.java]?.apply {
-                setPosition(GUIDE_PANEL_POSITION)
-                setQuaternion(GUIDE_PANEL_ROTATION)
-            }
-            panelsRoot.addChild(this)
-        }
-        attachments.entity(CONTROL_PANEL_ID)?.apply {
-            components[TransformComponent::class.java]?.apply {
-                setPosition(CONTROL_PANEL_POSITION)
-                setQuaternion(CONTROL_PANEL_ROTATION)
-            }
-            panelsRoot.addChild(this)
-        }
     }
 }
 
@@ -316,18 +447,73 @@ private const val HAND_AHEAD_M = 0.3f
 private const val HEAD_HEIGHT_M = 1.5f
 /** RingRig and GeneratedRingRig build rings at this multiple of real size. */
 private const val RIG_SCALE = 3f
-private val PAINT_POSITION = Vector3(0.36f, 1.45f, -0.95f)
+// Within arm's reach, so the fingertip can paint it: a little right of and below the eyes.
+// (It was 0.95 m away, beside the panel, out of reach.)
+private val PAINT_POSITION = Vector3(0.22f, 1.25f, -0.45f)
 private const val PAINT_SCALE = 3f
+/** The brush's reach around the fingertip, in metres, on the ring held at [PAINT_SCALE]. */
+private const val BRUSH_RADIUS_M = 0.012f
+private const val BRUSH_POLL_MS = 33L
+private const val TRIGGER_ON = 0.3f
+private const val GRIP_ON = 0.5f
+/** The grip grabs the ring when the controller is this close to its centre. */
+private const val GRAB_REACH_M = 0.2f
+
+/** The controllers' buttons, written from the tracking thread and read by the brush loop. */
+private class LatestButtons {
+    @Volatile var latest: ControllerActionData? = null
+}
+
+private fun distance(a: Vector3, b: Vector3): Float {
+    val x = a.x - b.x; val y = a.y - b.y; val z = a.z - b.z
+    return sqrt(x * x + y * y + z * z)
+}
+private const val BRUSH_LOG_MS = 1000L
+/** How often the painted texture is put back on the ring while painting. */
+private const val BRUSH_SHOW_MS = 120L
+/** The drag dot sits this far below the centre of the ring held for painting. */
+private const val HANDLE_BELOW_M = 0.14f
+private const val HANDLE_RADIUS_M = 0.012f
+private const val HANDLE_GRAB_RADIUS_M = 0.03f
+
+/** The dot under the ring held for painting, which moves it when dragged. */
+private fun makeHandle(): Entity =
+    Entity().apply {
+        enabled = false
+        components.set(
+            ModelComponent(
+                MeshResource.createSphere(HANDLE_RADIUS_M),
+                UnlitMaterial.create().apply { setBaseColor(Color4(1f, 1f, 1f, 1f)) },
+            )
+        )
+        components.set(InteractableComponent())
+        components.set(
+            CollisionComponent(
+                collisionShape = listOf(ShapeResource.createSphere(HANDLE_GRAB_RADIUS_M)),
+                physicsMaterial = PhysicsMaterialResource(),
+            )
+        )
+    }
 
 /**
- * Holds the ring still for painting beside the panel, facing the user (looking through its
- * hole, stone up). [PAINT_POSITION] is in the panels' frame, which follows the user.
+ * Holds the ring still for painting, facing the user (looking through its hole, stone up).
+ * [PAINT_POSITION] is in the panels' frame, which follows the user; [moved] is how far the
+ * user has dragged it from there, in the stage's space.
  */
-private fun holdForPainting(ring: Entity, stageRoot: Entity, panelsRoot: Entity, panelsYaw: Quat, yawDeg: Float, pitchDeg: Float) {
+private fun holdForPainting(
+    ring: Entity,
+    stageRoot: Entity,
+    panelsRoot: Entity,
+    panelsYaw: Quat,
+    yawDeg: Float,
+    pitchDeg: Float,
+    moved: Vector3,
+) {
     val yaw = Quat(Vector3(0f, 1f, 0f), Math.toRadians(yawDeg.toDouble()).toFloat())
     val pitch = Quat(Vector3(1f, 0f, 0f), Math.toRadians(pitchDeg.toDouble()).toFloat())
     ring.components[TransformComponent::class.java]?.apply {
-        setPosition(stageRoot.convertPositionFrom(PAINT_POSITION, panelsRoot))
+        val home = stageRoot.convertPositionFrom(PAINT_POSITION, panelsRoot)
+        setPosition(Vector3(home.x + moved.x, home.y + moved.y, home.z + moved.z))
         setQuaternion(panelsYaw * pitch * yaw)
         setScaleVector(Vector3(PAINT_SCALE, PAINT_SCALE, PAINT_SCALE))
     }

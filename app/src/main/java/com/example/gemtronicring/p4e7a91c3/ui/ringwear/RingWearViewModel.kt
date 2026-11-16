@@ -58,6 +58,12 @@ class RingWearViewModel(
     private var madePiece: Pair<RingPiece, Boolean>? = null
     private var named = false
 
+    /**
+     * Steps the Back button returns to, latest last. Going forward to a step already in it
+     * drops what came after, so going round (finger, colour, finger...) never piles up.
+     */
+    private val history = ArrayDeque<RingPhase>()
+
     init {
         val saved = sessions.load()
         log("start: ${if (saved == null) "no saved login" else "saved login for ${saved.name}"}")
@@ -96,27 +102,49 @@ class RingWearViewModel(
             RingWearEvent.RingSmaller ->
                 _state.update { it.copy(ringScale = (it.ringScale / SCALE_STEP).coerceAtLeast(MIN_RING_SCALE)) }
             RingWearEvent.RingRealSize -> _state.update { it.copy(ringScale = 1f) }
-            RingWearEvent.OpenLogin -> _state.update { it.copy(phase = RingPhase.Login, login = LoginUiState()) }
+            RingWearEvent.OpenLogin -> {
+                _state.update { it.copy(login = LoginUiState()) }
+                enter(RingPhase.Login)
+            }
             RingWearEvent.StartSketch -> {
                 seed = Random.nextInt(0, Int.MAX_VALUE)
-                _state.update { it.copy(phase = RingPhase.Sketching) }
+                enter(RingPhase.Sketching)
             }
+            RingWearEvent.Back -> goBack()
+            RingWearEvent.WatchMaking ->
+                if (_state.value.madeRing == MadeRing.Making) enter(RingPhase.Making3D)
+            RingWearEvent.WearMade -> putOnMade()
+            RingWearEvent.DismissMade -> _state.update { it.copy(madeRing = null) }
             RingWearEvent.OpenGallery -> openGallery()
             is RingWearEvent.WearPiece -> wear(event.piece)
             RingWearEvent.ChooseGemtronic -> {
                 _state.update { it.copy(piece = RingPiece.Gemtronic, paintable = false, paints = emptyMap()) }
                 enter(RingPhase.FingerChoosing)
             }
-            RingWearEvent.GoHome -> {
-                making3d?.cancel()
-                enter(RingPhase.Home)
-            }
+            // A ring being made keeps going; only Cancel stops it.
+            RingWearEvent.GoHome -> goHome()
             is RingWearEvent.SketchChanged -> onSketchChanged(event.sketchDataUri)
             is RingWearEvent.ChooseMaterial -> rerender { it.copy(material = event.material) }
-            // One colour for the whole ring for now; colouring by part comes later.
+            // With the brush, the wheel picks the brush's colour; otherwise it colours the whole ring.
             is RingWearEvent.PaintRing ->
                 _state.update {
-                    if (it.paintable) it.copy(paints = (0 until it.parts).associateWith { event.color }) else it
+                    when {
+                        !it.paintable -> it
+                        it.brush && it.brushAvailable -> it.copy(brushColor = event.color)
+                        else -> it.copy(paints = (0 until it.parts).associateWith { event.color })
+                    }
+                }
+            is RingWearEvent.SetBrush -> _state.update { it.copy(brush = event.on) }
+            is RingWearEvent.ControllersSeen -> _state.update { it.copy(controllersSeen = event.seen) }
+            is RingWearEvent.BrushAvailable -> _state.update { it.copy(brushAvailable = event.available) }
+            RingWearEvent.ClearBrush -> _state.update { it.copy(brushClear = it.brushClear + 1, paints = emptyMap()) }
+            is RingWearEvent.MoveRing ->
+                _state.update {
+                    it.copy(
+                        moveX = (it.moveX + event.dx).coerceIn(-MAX_MOVE_M, MAX_MOVE_M),
+                        moveY = (it.moveY + event.dy).coerceIn(-MAX_MOVE_M, MAX_MOVE_M),
+                        moveZ = (it.moveZ + event.dz).coerceIn(-MAX_MOVE_M, MAX_MOVE_M),
+                    )
                 }
             is RingWearEvent.ChoosePaintPart ->
                 _state.update { it.copy(paintPart = event.part.coerceIn(0, it.parts - 1)) }
@@ -141,7 +169,8 @@ class RingWearViewModel(
             is RingWearEvent.ConfirmMake3d -> confirmName(event.name)
             RingWearEvent.Cancel3d -> {
                 making3d?.cancel()
-                _state.update { it.copy(phase = RingPhase.Sketching) }
+                _state.update { it.copy(madeRing = null) }
+                enter(RingPhase.Sketching)
             }
             is RingWearEvent.SelectFinger -> _state.update { it.copy(finger = event.finger) }
             RingWearEvent.ConfirmFinger -> enter(RingPhase.HandSearching)
@@ -162,9 +191,8 @@ class RingWearViewModel(
     }
 
     private fun openGallery() {
-        _state.update {
-            it.copy(phase = RingPhase.Gallery, gallery = it.gallery.copy(loading = true, error = null))
-        }
+        _state.update { it.copy(gallery = it.gallery.copy(loading = true, error = null)) }
+        enter(RingPhase.Gallery)
         viewModelScope.launch {
             try {
                 val pieces = server.library()
@@ -230,7 +258,8 @@ class RingWearViewModel(
                 log("logged in as ${session.name}")
                 server.token = session.token
                 sessions.save(session)
-                _state.update { it.copy(user = session.name, login = LoginUiState(), phase = RingPhase.Home) }
+                _state.update { it.copy(user = session.name, login = LoginUiState()) }
+                goHome()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -246,7 +275,10 @@ class RingWearViewModel(
         server.token = null
         sessions.clear()
         making3d?.cancel()
-        _state.update { it.copy(user = null, phase = RingPhase.Login, login = LoginUiState(error = reason)) }
+        history.clear()
+        _state.update {
+            it.copy(user = null, phase = RingPhase.Login, login = LoginUiState(error = reason), madeRing = null)
+        }
     }
 
     private fun onSketchChanged(sketch: String?) {
@@ -323,8 +355,9 @@ class RingWearViewModel(
         madePiece = null
         named = false
         _state.update {
-            it.copy(phase = RingPhase.Naming, sketch = it.sketch.copy(making3dSeconds = 0, error = null))
+            it.copy(madeRing = MadeRing.Making, sketch = it.sketch.copy(making3dSeconds = 0, error = null))
         }
+        enter(RingPhase.Naming)
         making3d =
             viewModelScope.launch {
                 val started = System.currentTimeMillis()
@@ -376,25 +409,94 @@ class RingWearViewModel(
         if (!wearIfReady()) _state.update { it.copy(phase = RingPhase.Making3D) }
     }
 
-    /** Wears the made ring once it exists and has a name. Returns true if it did. */
+    /** True while the user is on the naming or waiting screen, not looking elsewhere. */
+    private fun watchingMaking(): Boolean =
+        _state.value.phase == RingPhase.Naming || _state.value.phase == RingPhase.Making3D
+
+    /**
+     * Wears the made ring once it exists and has a name. Returns true if it did. If the user
+     * went elsewhere while it was made, it waits for them to put it on from the notice.
+     */
     private fun wearIfReady(): Boolean {
-        val (piece, paintable) = madePiece ?: return false
-        if (!named) return false
+        if (madePiece == null || !named) return false
+        if (!watchingMaking()) {
+            _state.update { it.copy(madeRing = MadeRing.Ready) }
+            return true
+        }
+        putOnMade()
+        return true
+    }
+
+    private fun putOnMade() {
+        val (piece, paintable) = madePiece ?: return
         pendingName = null
         _state.update {
-            it.copy(piece = piece, paintable = paintable, paints = emptyMap(), turnYaw = 0f, turnPitch = 0f)
+            it.copy(
+                piece = piece,
+                paintable = paintable,
+                paints = emptyMap(),
+                turnYaw = 0f,
+                turnPitch = 0f,
+                madeRing = null,
+            )
         }
         // Clay and resin are coloured first, held still in front; other rings go on at once.
         enter(if (paintable) RingPhase.Painting else RingPhase.FingerChoosing)
-        return true
     }
 
     private fun fail3d(reason: String) {
         log("3D failed: $reason")
-        _state.update { it.copy(phase = RingPhase.Sketching, sketch = it.sketch.copy(error = reason)) }
+        if (!watchingMaking()) {
+            _state.update { it.copy(madeRing = MadeRing.Failed(reason), sketch = it.sketch.copy(error = reason)) }
+            return
+        }
+        _state.update { it.copy(madeRing = null, sketch = it.sketch.copy(error = reason)) }
+        enter(RingPhase.Sketching)
     }
 
     private fun enter(phase: RingPhase) {
+        val from = returnableStep(_state.value.phase)
+        val passed = history.indexOf(phase)
+        if (passed >= 0) {
+            while (history.size > passed) history.removeLast()
+        } else if (from != null && from != phase) {
+            history.addLast(from)
+        }
+        show(phase)
+    }
+
+    private fun goHome() {
+        history.clear()
+        show(RingPhase.Home)
+    }
+
+    private fun goBack() {
+        val phase = _state.value.phase
+        // Leaving naming or the wait stops the 3D job, as Cancel does.
+        if (phase == RingPhase.Naming || phase == RingPhase.Making3D) {
+            making3d?.cancel()
+            _state.update { it.copy(madeRing = null) }
+        }
+        var to = history.removeLastOrNull()
+        // The waiting screen is only worth going back to while the ring is still being made.
+        while (to == RingPhase.Making3D && _state.value.madeRing != MadeRing.Making) {
+            to = history.removeLastOrNull()
+        }
+        if (to == null) goHome() else show(to)
+    }
+
+    /** Where Back should land for a step, or null for steps that are only passed through. */
+    private fun returnableStep(phase: RingPhase): RingPhase? =
+        when (phase) {
+            // Worn or waiting for the hand: coming back waits for the hand again.
+            RingPhase.RingWorn, RingPhase.HandSearching -> RingPhase.HandSearching
+            // The ring keeps being made while the user looks around, so they can come back to it.
+            RingPhase.Making3D -> RingPhase.Making3D
+            RingPhase.Naming, RingPhase.TrackingUnavailable -> null
+            else -> phase
+        }
+
+    private fun show(phase: RingPhase) {
         gestures.reset()
         _state.update { it.copy(phase = phase) }
     }
@@ -433,6 +535,8 @@ class RingWearViewModel(
         private const val SCALE_STEP = 1.25f
         private const val MIN_RING_SCALE = 0.5f
         private const val MAX_RING_SCALE = 4f
+        /** The ring held for painting can be moved this far each way from where it starts. */
+        private const val MAX_MOVE_M = 1f
         /** Pieces shown in the gallery, newest first. */
         const val GALLERY_SIZE = 8
         private const val POLL_INTERVAL_MS = 3_000L

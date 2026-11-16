@@ -36,7 +36,32 @@ data class RingWearUiState(
     /** How the ring is turned while painting, in degrees. */
     val turnYaw: Float = 0f,
     val turnPitch: Float = 0f,
+    /** A 3D ring being made while the user is elsewhere, or null. */
+    val madeRing: MadeRing? = null,
+    /** Painting with the fingertip (true), or colouring the whole ring at once (false). */
+    val brush: Boolean = true,
+    /** True when the ring has a texture the brush can paint on. */
+    val brushAvailable: Boolean = false,
+    /** True once the controllers have been seen while painting. */
+    val controllersSeen: Boolean = false,
+    /** The brush's colour, as ARGB. */
+    val brushColor: Int = 0xFFE5484D.toInt(),
+    /** Bumped to wipe the brush strokes off. */
+    val brushClear: Int = 0,
+    /** How far the user has moved the ring from where it is held for painting, in metres. */
+    val moveX: Float = 0f,
+    val moveY: Float = 0f,
+    val moveZ: Float = 0f,
 )
+
+/** A 3D ring made in the background, for the notice shown above every panel. */
+sealed interface MadeRing {
+    data object Making : MadeRing
+
+    data object Ready : MadeRing
+
+    data class Failed(val reason: String) : MadeRing
+}
 
 data class LoginUiState(val busy: Boolean = false, val error: String? = null)
 
@@ -95,6 +120,33 @@ sealed interface RingWearEvent {
     data class WearPiece(val piece: GalleryPiece) : RingWearEvent
 
     data object GoHome : RingWearEvent
+
+    /** Back to the step before this one (home when there is none). */
+    data object Back : RingWearEvent
+
+    /** Back to the waiting screen of the ring being made. */
+    data object WatchMaking : RingWearEvent
+
+    /** Puts on the ring that was made in the background. */
+    data object WearMade : RingWearEvent
+
+    /** Closes the notice about a ring that could not be made. */
+    data object DismissMade : RingWearEvent
+
+    /** Paint with the fingertip (true) or colour the whole ring (false). */
+    data class SetBrush(val on: Boolean) : RingWearEvent
+
+    /** Wipes the brush strokes off. */
+    data object ClearBrush : RingWearEvent
+
+    /** The controllers were seen while painting, so the panel explains them. */
+    data class ControllersSeen(val seen: Boolean) : RingWearEvent
+
+    /** Whether the loaded ring can be painted with the brush. */
+    data class BrushAvailable(val available: Boolean) : RingWearEvent
+
+    /** Moves the ring held for painting, in metres. */
+    data class MoveRing(val dx: Float, val dy: Float, val dz: Float) : RingWearEvent
 
     /** The drawing changed. [sketchDataUri] is a PNG data URI; null when the drawing is empty. */
     data class SketchChanged(val sketchDataUri: String?) : RingWearEvent

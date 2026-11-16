@@ -56,6 +56,7 @@ import com.example.gemtronicring.p4e7a91c3.domain.model.StrokePoint
 import com.example.gemtronicring.p4e7a91c3.domain.usecase.ShapeStrokeUseCase
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.GalleryUiState
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.LoginUiState
+import com.example.gemtronicring.p4e7a91c3.ui.ringwear.MadeRing
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearViewModel
@@ -94,7 +95,7 @@ private const val SKETCH_PX = 512
 private const val PEN_WIDTH_PX = 6f
 private const val GUIDE_WIDTH_PX = 3f
 private const val GUIDE_GREY = 0xFFC8C8C8.toInt()
-private const val GALLERY_COLUMNS = 3
+private const val GALLERY_COLUMNS = 5
 private const val NAME_LIMIT = 40
 /** The Gemtronic ring is the project author's own design. */
 private const val GEMTRONIC_AUTHOR = "Linzhi"
@@ -181,9 +182,20 @@ internal fun LoginPanel(
             login.busy -> Body(stringResource(R.string.login_busy))
             login.error != null -> Body(login.error)
         }
-        Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = darkButtonColors()) {
-            Text(stringResource(R.string.login_browse))
+        Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
+            BackButton(onEvent)
+            Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = darkButtonColors()) {
+                Text(stringResource(R.string.login_browse))
+            }
         }
+    }
+}
+
+/** Back to the step before; on every panel, so no step is a dead end. */
+@Composable
+internal fun BackButton(onEvent: (RingWearEvent) -> Unit) {
+    Button(onClick = { onEvent(RingWearEvent.Back) }, colors = darkButtonColors()) {
+        Text(stringResource(R.string.back_step))
     }
 }
 
@@ -197,6 +209,7 @@ internal fun HomePanel(user: String?, onEvent: (RingWearEvent) -> Unit) {
     ) {
         Title(stringResource(R.string.app_name))
         Body(stringResource(R.string.home_subtitle))
+        Label(stringResource(R.string.controllers_home_note))
         if (user != null) {
             Button(onClick = { onEvent(RingWearEvent.StartSketch) }, colors = lightButtonColors()) {
                 Text(stringResource(R.string.home_draw))
@@ -205,7 +218,6 @@ internal fun HomePanel(user: String?, onEvent: (RingWearEvent) -> Unit) {
         Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.home_gallery))
         }
-        RecentreButton(onEvent)
         if (user != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
                 Label(stringResource(R.string.home_signed_in, user))
@@ -297,9 +309,7 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
             gallery.error != null -> Body(stringResource(R.string.sketch_error, gallery.error))
             gallery.pieces.isEmpty() -> Body(stringResource(R.string.gallery_empty))
         }
-        Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = darkButtonColors()) {
-            Text(stringResource(R.string.back_button))
-        }
+        BackButton(onEvent)
     }
 }
 
@@ -308,6 +318,15 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
 internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit) {
     val strokes = remember { mutableStateListOf<List<Offset>>() }
     val current = remember { mutableStateListOf<Offset>() }
+    // The eraser cuts away the parts of lines it passes over.
+    var erasing by remember { mutableStateOf(false) }
+    val erasingNow by rememberUpdatedState(erasing)
+    // The drawing before each change, so Undo also undoes erasing and clearing.
+    val past = remember { mutableListOf<List<List<Offset>>>() }
+    fun keepForUndo() {
+        past.add(strokes.toList())
+        if (past.size > UNDO_LIMIT) past.removeAt(0)
+    }
     var canvasPx by remember { mutableStateOf(1) }
     var lastSent by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
@@ -339,6 +358,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
         Log.d("SketchOn", "stroke: ${current.size} points")
         val shaped =
             shaper.shape(current.map { StrokePoint(it.x, it.y) }, smooth = options.smooth, shapes = options.shapes)
+        keepForUndo()
         strokes.add(shaped.map { Offset(it.x, it.y) })
         current.clear()
         send()
@@ -368,6 +388,25 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                                 // (PICO's spatial drag detector got no events on this panel.)
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false)
+                                    if (erasingNow) {
+                                        keepForUndo()
+                                        val radius = canvasPx * ERASER_RADIUS
+                                        fun rub(at: Offset) {
+                                            val left = eraseAround(strokes.toList(), at, radius)
+                                            strokes.clear()
+                                            strokes.addAll(left)
+                                        }
+                                        rub(down.position)
+                                        while (true) {
+                                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                            rub(change.position)
+                                            change.consume()
+                                            if (!change.pressed) break
+                                            if (System.currentTimeMillis() - lastSent >= SEND_EVERY_MS) send()
+                                        }
+                                        send()
+                                        return@awaitEachGesture
+                                    }
                                     current.clear()
                                     current.add(down.position)
                                     while (true) {
@@ -393,14 +432,20 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 }
                 RenderView(sketch)
             }
+            ButtonRow(
+                listOf(
+                    Triple(R.string.sketch_pen, !erasing) { erasing = false },
+                    Triple(R.string.sketch_eraser, erasing) { erasing = true },
+                )
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = darkButtonColors()) {
-                    Text(stringResource(R.string.back_button))
-                }
+                BackButton(onEvent)
                 Button(
                     onClick = {
-                        if (strokes.isNotEmpty()) {
-                            strokes.removeAt(strokes.lastIndex)
+                        val before = past.removeLastOrNull()
+                        if (before != null) {
+                            strokes.clear()
+                            strokes.addAll(before)
                             send()
                         }
                     },
@@ -410,6 +455,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 }
                 Button(
                     onClick = {
+                        if (strokes.isNotEmpty()) keepForUndo()
                         strokes.clear()
                         current.clear()
                         send()
@@ -427,7 +473,6 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 }
             }
             Body(statusText(sketch))
-            RecentreButton(onEvent)
             Section(R.string.sketch_help) {
                 ButtonRow(
                     listOf(
@@ -486,12 +531,12 @@ private fun Section(labelRes: Int, modifier: Modifier = Modifier, content: @Comp
     }
 }
 
-/** Buttons as (label, chosen, action); the chosen ones are light. */
+/** Buttons as (label, chosen, action); the chosen ones are lilac. */
 @Composable
 private fun ButtonRow(buttons: List<Triple<Int, Boolean, () -> Unit>>) {
     Row(horizontalArrangement = Arrangement.spacedBy(SmallGap)) {
         buttons.forEach { (label, chosen, onClick) ->
-            Button(onClick = onClick, colors = if (chosen) lightButtonColors() else darkButtonColors()) {
+            Button(onClick = onClick, colors = if (chosen) chosenButtonColors() else darkButtonColors()) {
                 Text(stringResource(label))
             }
         }
@@ -525,7 +570,7 @@ private fun ViewPicker(chosen: SketchView, onPick: (SketchView) -> Unit) {
                 }
                 Button(
                     onClick = { onPick(view) },
-                    colors = if (view == chosen) lightButtonColors() else darkButtonColors(),
+                    colors = if (view == chosen) chosenButtonColors() else darkButtonColors(),
                 ) {
                     Text(stringResource(viewLabel(view)))
                 }
@@ -585,6 +630,7 @@ internal fun NamingPanel(sketch: SketchUiState, drafts: TextDrafts, onEvent: (Ri
             )
         }
         Label(stringResource(R.string.naming_progress, sketch.making3dSeconds))
+        Label(stringResource(R.string.controllers_making_note))
         Body(stringResource(R.string.naming_shared))
         Label(stringResource(R.string.naming_tips_title))
         Body(stringResource(R.string.naming_tip_time))
@@ -611,17 +657,39 @@ internal fun NamingPanel(sketch: SketchUiState, drafts: TextDrafts, onEvent: (Ri
  */
 @Composable
 internal fun PaintingPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit) {
-    val current = state.paints[0] ?: WHITE
+    val brushing = state.brush && state.brushAvailable
+    val current = if (brushing) state.brushColor else state.paints[0] ?: WHITE
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         modifier = Modifier.width(440.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Pad),
     ) {
         Title(stringResource(R.string.painting_title))
-        Body(stringResource(R.string.painting_body))
+        if (state.brushAvailable) {
+            ButtonRow(
+                listOf(
+                    Triple(R.string.painting_brush, state.brush) { onEvent(RingWearEvent.SetBrush(true)) },
+                    Triple(R.string.painting_whole, !state.brush) { onEvent(RingWearEvent.SetBrush(false)) },
+                )
+            )
+        }
+        Body(
+            stringResource(
+                when {
+                    brushing && state.controllersSeen -> R.string.painting_controller_body
+                    brushing -> R.string.painting_brush_body
+                    else -> R.string.painting_body
+                }
+            )
+        )
         Section(R.string.sketch_color) {
             ColorWheel(current) { onEvent(RingWearEvent.PaintRing(it)) }
         }
-        Label(stringResource(R.string.painting_parts_soon))
+        if (state.brushAvailable) {
+            Button(onClick = { onEvent(RingWearEvent.ClearBrush) }, colors = darkButtonColors()) {
+                Text(stringResource(R.string.painting_clear))
+            }
+        }
+        Label(stringResource(if (state.controllersSeen) R.string.painting_move_grip else R.string.painting_move))
         Section(R.string.painting_turn) {
             Body(stringResource(R.string.painting_drag))
             ButtonRow(
@@ -634,10 +702,10 @@ internal fun PaintingPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> U
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
+            BackButton(onEvent)
             Button(onClick = { onEvent(RingWearEvent.FinishPainting) }, colors = lightButtonColors()) {
                 Text(stringResource(R.string.wear_button))
             }
-            RecentreButton(onEvent)
         }
     }
 }
@@ -652,9 +720,85 @@ internal fun Making3dPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Un
     ) {
         Title(stringResource(R.string.making_title))
         RenderView(sketch)
+        EstimatedProgress(sketch.making3dSeconds)
         Body(stringResource(R.string.making_progress, sketch.making3dSeconds))
+        // A new tip every few seconds, so the wait has something to read.
+        val tips = MAKING_TIPS
+        Label(stringResource(tips[(sketch.making3dSeconds / TIP_SECONDS) % tips.size]))
+        Label(stringResource(R.string.controllers_making_note))
+        Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = lightButtonColors()) {
+            Text(stringResource(R.string.making_browse))
+        }
         Button(onClick = { onEvent(RingWearEvent.Cancel3d) }, colors = darkButtonColors()) {
             Text(stringResource(R.string.making_cancel))
+        }
+    }
+}
+
+private const val TIP_SECONDS = 6
+private val MAKING_TIPS =
+    listOf(
+        R.string.making_tip_browse,
+        R.string.making_tip_colour,
+        R.string.making_tip_hand,
+        R.string.making_tip_size,
+        R.string.making_tip_finger,
+        R.string.making_tip_gallery,
+    )
+
+/**
+ * The 3D service does not say how far along it is, so this bar is an estimate from the time
+ * taken: it moves quickly at first and slows down near the end, never reaching the end
+ * until the ring is really done.
+ */
+@Composable
+private fun EstimatedProgress(seconds: Int) {
+    val done = (0.95f * (1f - kotlin.math.exp(-seconds / EXPECTED_SECONDS))).coerceIn(0.03f, 0.95f)
+    Box(Modifier.width(360.dp).height(10.dp).background(Dim, RoundedCornerShape(5.dp))) {
+        Box(
+            Modifier.width(360.dp * done)
+                .height(10.dp)
+                .background(PicoTheme.colorScheme.labelPrimaryLight, RoundedCornerShape(5.dp))
+        )
+    }
+}
+
+/** About how long Tripo takes; the bar is two thirds of the way there after this long. */
+private const val EXPECTED_SECONDS = 35f
+
+/**
+ * Shown above every panel while a ring is made in the background, and when it is ready or
+ * has failed, so the user can look around and come back to it.
+ */
+@Composable
+internal fun MadeRingNotice(made: MadeRing, seconds: Int, onEvent: (RingWearEvent) -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Gap),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.width(560.dp).background(GemtronicColors.ringScreenBase, PanelShape).padding(Gap),
+    ) {
+        when (made) {
+            MadeRing.Making -> {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(SmallGap)) {
+                    Body(stringResource(R.string.made_making, seconds))
+                    EstimatedProgress(seconds)
+                }
+                Button(onClick = { onEvent(RingWearEvent.WatchMaking) }, colors = darkButtonColors()) {
+                    Text(stringResource(R.string.made_watch))
+                }
+            }
+            MadeRing.Ready -> {
+                Body(stringResource(R.string.made_ready), Modifier.weight(1f))
+                Button(onClick = { onEvent(RingWearEvent.WearMade) }, colors = lightButtonColors()) {
+                    Text(stringResource(R.string.made_wear))
+                }
+            }
+            is MadeRing.Failed -> {
+                Body(stringResource(R.string.made_failed, made.reason), Modifier.weight(1f))
+                Button(onClick = { onEvent(RingWearEvent.DismissMade) }, colors = darkButtonColors()) {
+                    Text(stringResource(R.string.made_dismiss))
+                }
+            }
         }
     }
 }
@@ -683,8 +827,11 @@ internal fun GeneratedGuide(paintable: Boolean, ringScale: Float, onEvent: (Ring
         Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.home_gallery))
         }
-        Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = darkButtonColors()) {
-            Text(stringResource(R.string.generated_home))
+        Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
+            BackButton(onEvent)
+            Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = darkButtonColors()) {
+                Text(stringResource(R.string.generated_home))
+            }
         }
     }
 }
@@ -735,7 +882,8 @@ private fun viewHint(v: SketchView): Int =
 private fun Title(text: String) = Text(text, color = light(), style = PicoTheme.typography.titleLarge)
 
 @Composable
-private fun Body(text: String) = Text(text, color = light(), style = PicoTheme.typography.bodyLarge)
+private fun Body(text: String, modifier: Modifier = Modifier) =
+    Text(text, color = light(), style = PicoTheme.typography.bodyLarge, modifier = modifier)
 
 @Composable
 private fun Label(text: String) = Text(text, color = light(), style = PicoTheme.typography.bodyMedium)
@@ -743,10 +891,19 @@ private fun Label(text: String) = Text(text, color = light(), style = PicoTheme.
 @Composable
 private fun light() = PicoTheme.colorScheme.labelPrimaryLight
 
+/** Main actions: the icon's mint, dark text. */
 @Composable
 private fun lightButtonColors() =
     ButtonDefaults.buttonColors(
-        containerColor = PicoTheme.colorScheme.labelPrimaryLight,
+        containerColor = GemtronicColors.accentMint,
+        contentColor = GemtronicColors.ringScreenBase,
+    )
+
+/** The option chosen right now: the icon's lilac, so it is not mistaken for an action. */
+@Composable
+private fun chosenButtonColors() =
+    ButtonDefaults.buttonColors(
+        containerColor = GemtronicColors.accentLilac,
         contentColor = GemtronicColors.ringScreenBase,
     )
 
@@ -756,7 +913,7 @@ private fun fieldColors() =
     TextFieldDefaults.textFieldColors(
         textColor = PicoTheme.colorScheme.labelPrimaryLight,
         backgroundColor = Color(0xFF3A403C),
-        focusedColor = PicoTheme.colorScheme.labelPrimaryLight,
+        focusedColor = GemtronicColors.accentMint,
         placeholderColor = Color(0xFFB8BDB9),
     )
 
@@ -787,6 +944,42 @@ private fun guideShapes(view: SketchView): List<List<StrokePoint>> {
         // From the side: the band is a tall narrow strip.
         SketchView.Profile -> listOf(box(0.46f, 0.3f, 0.54f, 0.9f))
     }
+}
+
+private const val UNDO_LIMIT = 50
+/** The eraser's reach, as a share of the canvas width. */
+private const val ERASER_RADIUS = 0.035f
+
+/**
+ * Cuts away every part of the lines within [radius] of [at]. A line the eraser crosses is
+ * split in two. Lines are first filled in with points, so a long straight piece is cut
+ * where the eraser passes and not only at its ends.
+ */
+internal fun eraseAround(strokes: List<List<Offset>>, at: Offset, radius: Float): List<List<Offset>> {
+    val step = radius / 2f
+    val out = mutableListOf<List<Offset>>()
+    for (stroke in strokes) {
+        var piece = mutableListOf<Offset>()
+        fun keep(p: Offset) {
+            if ((p - at).getDistance() > radius) {
+                piece.add(p)
+            } else if (piece.isNotEmpty()) {
+                out.add(piece)
+                piece = mutableListOf()
+            }
+        }
+        stroke.forEachIndexed { i, p ->
+            if (i > 0) {
+                val a = stroke[i - 1]
+                val n = ((p - a).getDistance() / step).toInt()
+                for (k in 1 until n) keep(a + (p - a) * (k / n.toFloat()))
+            }
+            keep(p)
+        }
+        if (piece.isNotEmpty()) out.add(piece)
+    }
+    // A dot left behind is too small to see or to mean anything.
+    return out.filter { it.size >= 2 }
 }
 
 /** Draws the guide and the strokes at 512 px, the size the render server expects. */

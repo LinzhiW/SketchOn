@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">SketchOn</string>
     <string name="hello">Hello, Spatial SDK！</string>
-    <string name="hand_hint">Raise your hand to put on the ring</string>
+    <string name="hand_hint">Raise your hand to put on the ring. Holding controllers? Put them down: the headset tracks your hands once they are set aside.</string>
     <string name="tracking_message">Hand tracking is unavailable. Allow it in system settings, then reopen the app.</string>
     <string name="finger_title">Tap the finger wearing the ring</string>
     <string name="hand_picker_description">Hand shape for choosing a finger</string>
@@ -24,6 +24,7 @@
     <string name="next_page">Next</string>
     <string name="confirm_button">Confirm</string>
     <string name="back_button">Back</string>
+    <string name="back_step">← Back</string>
     <string name="home_subtitle">Draw a ring and watch it come to life, or try on one from the gallery.</string>
     <string name="home_draw">Draw a ring</string>
     <string name="sketch_title">Draw your ring</string>
@@ -36,8 +37,23 @@
     <string name="sketch_rendered">Rendered in %1$d ms</string>
     <string name="sketch_error">Problem: %1$s</string>
     <string name="making_title">Making your ring in 3D</string>
-    <string name="making_progress">This takes one to two minutes. %1$d s so far.</string>
+    <string name="making_progress">Usually about a minute. %1$d s so far.</string>
     <string name="making_cancel">Cancel</string>
+    <string name="sketch_pen">Pen</string>
+    <string name="sketch_eraser">Eraser</string>
+    <string name="making_browse">Look around the gallery meanwhile</string>
+    <string name="making_tip_browse">Tip: you can browse the gallery while you wait. We will tell you when your ring is ready.</string>
+    <string name="making_tip_colour">Tip: clay and resin rings can be coloured any way you like once they are made.</string>
+    <string name="making_tip_hand">Tip: raise your hand in front of you to see the ring on your finger.</string>
+    <string name="making_tip_size">Tip: if the ring looks too big or small, use − and + to change its size.</string>
+    <string name="making_tip_finger">Tip: you can move the ring to another finger at any time.</string>
+    <string name="making_tip_gallery">Tip: your ring goes into the Gallery, so others can try it on too.</string>
+    <string name="made_making">Your ring is being made… %1$d s</string>
+    <string name="made_watch">Watch</string>
+    <string name="made_ready">Your ring is ready.</string>
+    <string name="made_wear">Put it on</string>
+    <string name="made_failed">Your ring could not be made: %1$s</string>
+    <string name="made_dismiss">OK</string>
     <string name="generated_title">Your ring</string>
     <string name="generated_body">Raise your hand to see it on your finger.</string>
     <string name="generated_draw_again">Draw another</string>
@@ -96,6 +112,13 @@
     <string name="painting_up">Up</string>
     <string name="painting_down">Down</string>
     <string name="painting_parts_soon">Colouring the band and the decoration separately: coming soon.</string>
+    <string name="painting_brush">Brush</string>
+    <string name="painting_whole">Whole ring</string>
+    <string name="painting_brush_body">Pick a colour, then touch the ring with your index fingertip to paint where you touch.</string>
+    <string name="painting_clear">Wipe the paint off</string>
+    <string name="painting_controller_body">Hold the right trigger and touch the ring to paint. Touch a colour, the eraser or a brush size on the left controller\'s palette with the brush tip to choose it. Put the controllers down before you wear the ring.</string>
+    <string name="painting_move_grip">Squeeze the right grip near the ring and move to carry it.</string>
+    <string name="painting_move">Pinch the dot under the ring and drag it to move the ring.</string>
     <string name="painting_drag">Drag the ring itself to turn it, or use the buttons.</string>
     <string name="login_body">Log in to draw rings and share them. Anyone can browse the Gallery. New here? Choose a name and a password of 6 or more characters, then Sign up.</string>
     <string name="login_name">Name</string>
@@ -112,4 +135,8 @@
     <string name="ring_size">Ring size: %1$d%%</string>
     <string name="ring_real_size">Real size</string>
     <string name="recentre">Bring panels here</string>
+    <!-- The headset stops tracking hands while controllers are in use, so wearing needs bare hands. -->
+    <string name="controllers_home_note">Draw with controllers or your hands. To wear a ring, put the controllers down: the headset only sees your hands once the controllers are set aside.</string>
+    <string name="controllers_making_note">When it is ready you will wear it on your hand. Put the controllers down now so the headset can see your hands.</string>
+    <string name="controllers_finger_note">Put the controllers down: the ring needs your bare hand.</string>
 </resources>

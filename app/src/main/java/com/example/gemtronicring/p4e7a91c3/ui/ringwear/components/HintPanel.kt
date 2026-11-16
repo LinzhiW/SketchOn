@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.example.gemtronicring.p4e7a91c3.R
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPhase
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingPiece
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearEvent
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearUiState
 import com.example.gemtronicring.p4e7a91c3.ui.theme.GemtronicColors
@@ -38,6 +39,44 @@ private val MessageMaxWidth = 480.dp
 private val PanelGap = 16.dp
 private val PanelPadding = 24.dp
 
+/**
+ * Everything the user reads or presses, for the app's one system window: the step's panel,
+ * or while the ring is in use, the guide (and for the Gemtronic ring, its buttons).
+ */
+@Composable
+internal fun WindowPanels(state: RingWearUiState, drafts: TextDrafts, onEvent: (RingWearEvent) -> Unit) {
+    val made = state.madeRing
+    val watching = state.phase == RingPhase.Naming || state.phase == RingPhase.Making3D
+    if (made != null && !watching) {
+        // A ring is being made, or is ready, while the user looks around: say so above the panel.
+        Column(verticalArrangement = Arrangement.spacedBy(PanelGap), horizontalAlignment = Alignment.CenterHorizontally) {
+            MadeRingNotice(made, state.sketch.making3dSeconds, onEvent)
+            StepPanels(state, drafts, onEvent)
+        }
+    } else {
+        StepPanels(state, drafts, onEvent)
+    }
+}
+
+@Composable
+private fun StepPanels(state: RingWearUiState, drafts: TextDrafts, onEvent: (RingWearEvent) -> Unit) {
+    when (state.phase) {
+        RingPhase.HandSearching,
+        RingPhase.RingWorn -> {
+            val gemtronic = state.piece == RingPiece.Gemtronic
+            Row(horizontalArrangement = Arrangement.spacedBy(PanelGap), verticalAlignment = Alignment.Top) {
+                if (gemtronic) ControlPanel(onEvent)
+                Column(verticalArrangement = Arrangement.spacedBy(PanelGap)) {
+                    if (state.phase == RingPhase.HandSearching) HandHint()
+                    if (gemtronic) GestureGuide(state.activeFrame, state.ringScale, onEvent)
+                    else GeneratedGuide(state.paintable, state.ringScale, onEvent)
+                }
+            }
+        }
+        else -> CenterPanel(state, drafts, onEvent)
+    }
+}
+
 /** The panel in front of the user: finger choice first, then whatever the ring needs next. */
 @Composable
 internal fun CenterPanel(state: RingWearUiState, drafts: TextDrafts, onEvent: (RingWearEvent) -> Unit) {
@@ -51,7 +90,16 @@ internal fun CenterPanel(state: RingWearUiState, drafts: TextDrafts, onEvent: (R
         RingPhase.Painting -> PaintingPanel(state, onEvent)
         RingPhase.FingerChoosing -> FingerPanel(state, onEvent)
         RingPhase.HandSearching -> HandHint()
-        RingPhase.TrackingUnavailable -> TrackingMessage()
+        RingPhase.TrackingUnavailable ->
+            Column(verticalArrangement = Arrangement.spacedBy(PanelGap), horizontalAlignment = Alignment.CenterHorizontally) {
+                TrackingMessage()
+                Row(horizontalArrangement = Arrangement.spacedBy(PanelGap)) {
+                    BackButton(onEvent)
+                    Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = lightButton()) {
+                        Text(stringResource(R.string.generated_home))
+                    }
+                }
+            }
         RingPhase.RingWorn -> Unit
     }
 }
@@ -67,9 +115,13 @@ private fun FingerPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                 .padding(PanelPadding),
     ) {
         PanelTitle(stringResource(R.string.finger_title))
+        GuideLine(R.string.controllers_finger_note)
         HandPicker(selected = state.finger) { onEvent(RingWearEvent.SelectFinger(it)) }
-        Button(onClick = { onEvent(RingWearEvent.ConfirmFinger) }, colors = lightButton()) {
-            Text(stringResource(R.string.wear_button))
+        Row(horizontalArrangement = Arrangement.spacedBy(PanelGap)) {
+            BackButton(onEvent)
+            Button(onClick = { onEvent(RingWearEvent.ConfirmFinger) }, colors = lightButton()) {
+                Text(stringResource(R.string.wear_button))
+            }
         }
     }
 }
@@ -140,11 +192,18 @@ internal fun GestureGuide(frame: String?, ringScale: Float, onEvent: (RingWearEv
         GuideLine(R.string.guide_back)
         GuideLine(R.string.guide_click)
         RingSizeRow(ringScale, onEvent)
+        Button(onClick = { onEvent(RingWearEvent.ChangeFinger) }, colors = lightButton()) {
+            Text(stringResource(R.string.change_finger))
+        }
+        // The Gemtronic ring's own Back gesture moves its menu, so the window needs ways out.
+        Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = lightButton()) {
+            Text(stringResource(R.string.home_gallery))
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(PanelGap)) {
-            Button(onClick = { onEvent(RingWearEvent.ChangeFinger) }, colors = lightButton()) {
-                Text(stringResource(R.string.change_finger))
+            BackButton(onEvent)
+            Button(onClick = { onEvent(RingWearEvent.GoHome) }, colors = lightButton()) {
+                Text(stringResource(R.string.generated_home))
             }
-            RecentreButton(onEvent)
         }
     }
 }
@@ -153,7 +212,7 @@ internal fun GestureGuide(frame: String?, ringScale: Float, onEvent: (RingWearEv
 @Composable
 private fun lightButton(): ButtonColors =
     ButtonDefaults.buttonColors(
-        containerColor = PicoTheme.colorScheme.labelPrimaryLight,
+        containerColor = GemtronicColors.accentMint,
         contentColor = GemtronicColors.ringScreenBase,
     )
 

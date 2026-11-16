@@ -1,8 +1,8 @@
 package com.example.gemtronicring.p4e7a91c3
 
 import androidx.compose.ui.unit.dp
-import com.example.gemtronicring.p4e7a91c3.ui.ringwear.LOGIN_WINDOW_ID
-import com.example.gemtronicring.p4e7a91c3.ui.ringwear.LoginWindow
+import com.example.gemtronicring.p4e7a91c3.ui.ringwear.MAIN_WINDOW_ID
+import com.example.gemtronicring.p4e7a91c3.ui.ringwear.MainWindow
 import com.example.gemtronicring.p4e7a91c3.ui.ringwear.RingWearScreen
 import com.pico.spatial.ui.design.PicoTheme
 import com.pico.spatial.ui.foundation.dsl.DefaultStage
@@ -18,16 +18,17 @@ fun mainApp(scope: SpatialAppScope) =
                 RingWearScreen()
             }
         }
-        // A system window, so the user can move it by its handle and type into it.
+        // The app's panels, in a system window: moved by its handle, and typing works in it.
         WindowContainer(
-            LOGIN_WINDOW_ID,
+            MAIN_WINDOW_ID,
             form = Form.Planar,
-            defaultSize = WindowContainerSize(width = 520.dp, height = 640.dp),
+            // Fits the largest panel (drawing); smaller ones sit in the middle (see MainWindow).
+            defaultSize = WindowContainerSize(width = 1160.dp, height = 780.dp),
             // The panel draws its own dark card; the frosted backing would show as a second box.
             enableMaterialBackground = false,
         ) {
             PicoTheme {
-                LoginWindow()
+                MainWindow()
             }
         }
     }
