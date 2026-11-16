@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.gemtronicring.p4e7a91c3.R
+import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.DesignStyle
 import com.example.gemtronicring.p4e7a91c3.domain.model.Material
 import com.example.gemtronicring.p4e7a91c3.domain.model.SketchView
@@ -85,8 +86,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val PanelShape = RoundedCornerShape(24.dp)
-private val SquareShape = RoundedCornerShape(16.dp)
+internal val CardPanelShape = RoundedCornerShape(24.dp)
+private val PanelShape = CardPanelShape
+internal val SquareShape = RoundedCornerShape(16.dp)
 private val SquareSize = 300.dp
 private val LeftWidth = 616.dp
 private val RightWidth = 440.dp
@@ -96,10 +98,10 @@ private val ViewPictureSize = 120.dp
 private val ToolButtonSize = 64.dp
 private val SliderWidth = 260.dp
 private val ColourHeight = 150.dp
-private val Gap = 16.dp
-private val SmallGap = 8.dp
-private val Pad = 24.dp
-private val Dim = Color(0xFF2A2F2C)
+internal val Gap = 16.dp
+internal val SmallGap = 8.dp
+internal val Pad = 24.dp
+internal val Dim = Color(0xFF2A2F2C)
 private const val SEND_EVERY_MS = 300L
 private const val SKETCH_PX = 512
 /** Pen line width at each end of the slider, in pixels of the 512 px drawing. */
@@ -219,7 +221,7 @@ internal fun BackButton(onEvent: (RingWearEvent) -> Unit) {
 
 /** First panel: draw a ring, or browse what has been made. */
 @Composable
-internal fun HomePanel(user: String?, onEvent: (RingWearEvent) -> Unit) {
+internal fun HomePanel(user: String?, unseen: Int, onEvent: (RingWearEvent) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(Gap),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -235,6 +237,12 @@ internal fun HomePanel(user: String?, onEvent: (RingWearEvent) -> Unit) {
         }
         Button(onClick = { onEvent(RingWearEvent.OpenGallery) }, colors = lightButtonColors()) {
             Text(stringResource(R.string.home_gallery))
+        }
+        if (user != null) {
+            // My creations, saved rings, what I wore, and notifications (with how many are new).
+            Button(onClick = { onEvent(RingWearEvent.OpenMine) }, colors = if (unseen > 0) chosenButtonColors() else lightButtonColors()) {
+                Text(if (unseen > 0) stringResource(R.string.home_me_new, unseen) else stringResource(R.string.home_me))
+            }
         }
         if (user != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(Gap), verticalAlignment = Alignment.CenterVertically) {
@@ -267,21 +275,20 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
         val author: String?,
         val picture: ImageBitmap?,
         val onClick: () -> Unit,
+        val piece: GalleryPiece? = null,
     )
 
     val cards =
         listOf(
-            Card("gemtronic", stringResource(R.string.gallery_gemtronic), GEMTRONIC_AUTHOR, gemtronicPicture) {
+            Card("gemtronic", stringResource(R.string.gallery_gemtronic), GEMTRONIC_AUTHOR, gemtronicPicture, onClick = {
                 onEvent(RingWearEvent.ChooseGemtronic)
-            }
+            })
         ) +
             gallery.pieces.take(RingWearViewModel.GALLERY_SIZE).mapIndexed { i, piece ->
                 val bytes = gallery.pictures[piece.id]
                 val picture = remember(bytes) { bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() } }
                 val label = piece.name ?: stringResource(R.string.gallery_piece, gallery.pieces.size - i)
-                Card(piece.id, label, piece.author, picture) {
-                    onEvent(RingWearEvent.WearPiece(piece))
-                }
+                Card(piece.id, label, piece.author, picture, { onEvent(RingWearEvent.OpenRing(piece.id)) }, piece)
             }
 
     Column(
@@ -308,6 +315,13 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
                             if (card.author != null) stringResource(R.string.gallery_by, card.author)
                             else stringResource(R.string.gallery_by_unknown)
                         )
+                        // Like a post: the cover's colours, and likes and saves in the corner.
+                        card.piece?.let { p ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+                                p.cover?.let { Swatches(it.paints, it.textureUrl != null) }
+                                LikesAndSaves(p.likes, p.saves)
+                            }
+                        }
                         Button(
                             onClick = card.onClick,
                             enabled = gallery.opening == null,
@@ -555,7 +569,7 @@ private fun Section(labelRes: Int, modifier: Modifier = Modifier, content: @Comp
 
 /** An icon button; a chosen one (the pen or the eraser in use) is lilac. */
 @Composable
-private fun ToolButton(iconRes: Int, labelRes: Int, chosen: Boolean = false, onClick: () -> Unit) {
+internal fun ToolButton(iconRes: Int, labelRes: Int, chosen: Boolean = false, onClick: () -> Unit) {
     IconButton(
         onClick = onClick,
         size = IconButtonDefaults.iconButtonSize(ToolButtonSize),
@@ -745,6 +759,7 @@ internal fun PaintingPanel(state: RingWearUiState, onEvent: (RingWearEvent) -> U
                 Text(stringResource(R.string.painting_clear))
             }
         }
+        SaveColourRow(state.saveColour, canSave = state.pieceId != null, onEvent)
         Label(stringResource(if (state.controllersSeen) R.string.painting_move_grip else R.string.painting_move))
         Section(R.string.painting_turn) {
             // While brushing, a drag on the ring paints; the left hand turns it instead.
@@ -936,21 +951,21 @@ private fun viewHint(v: SketchView): Int =
     }
 
 @Composable
-private fun Title(text: String) = Text(text, color = light(), style = PicoTheme.typography.titleLarge)
+internal fun Title(text: String) = Text(text, color = light(), style = PicoTheme.typography.titleLarge)
 
 @Composable
-private fun Body(text: String, modifier: Modifier = Modifier) =
+internal fun Body(text: String, modifier: Modifier = Modifier) =
     Text(text, color = light(), style = PicoTheme.typography.bodyLarge, modifier = modifier)
 
 @Composable
-private fun Label(text: String) = Text(text, color = light(), style = PicoTheme.typography.bodyMedium)
+internal fun Label(text: String) = Text(text, color = light(), style = PicoTheme.typography.bodyMedium)
 
 @Composable
-private fun light() = PicoTheme.colorScheme.labelPrimaryLight
+internal fun light() = PicoTheme.colorScheme.labelPrimaryLight
 
 /** Main actions: the icon's mint, dark text. */
 @Composable
-private fun lightButtonColors() =
+internal fun lightButtonColors() =
     ButtonDefaults.buttonColors(
         containerColor = GemtronicColors.accentMint,
         contentColor = GemtronicColors.ringScreenBase,
@@ -958,7 +973,7 @@ private fun lightButtonColors() =
 
 /** The option chosen right now: the icon's lilac, so it is not mistaken for an action. */
 @Composable
-private fun chosenButtonColors() =
+internal fun chosenButtonColors() =
     ButtonDefaults.buttonColors(
         containerColor = GemtronicColors.accentLilac,
         contentColor = GemtronicColors.ringScreenBase,
@@ -975,7 +990,7 @@ private fun fieldColors() =
     )
 
 @Composable
-private fun darkButtonColors() =
+internal fun darkButtonColors() =
     ButtonDefaults.buttonColors(containerColor = Dim, contentColor = PicoTheme.colorScheme.labelPrimaryLight)
 
 /**

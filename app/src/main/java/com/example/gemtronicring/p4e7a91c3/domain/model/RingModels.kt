@@ -7,6 +7,10 @@ enum class RingPhase {
     Home,
     /** Pieces to try on: the Gemtronic ring and everything made so far. */
     Gallery,
+    /** One ring: its likes and saves, the author's colourways and everyone else's. */
+    RingPage,
+    /** Mine: rings I drew, colourways I made, saved rings, what I wore, notifications. */
+    Mine,
     /** Drawing, with a live AI render beside the drawing. */
     Sketching,
     /** Naming the piece before it is made into 3D and shared in the gallery. */

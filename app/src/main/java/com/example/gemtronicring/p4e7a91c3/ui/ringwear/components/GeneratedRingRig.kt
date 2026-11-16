@@ -93,7 +93,7 @@ internal class GeneratedRingRig private constructor(
         val edge = model.convertPositionFrom(Vector3(point.x + radiusM, point.y, point.z), null)
         val r = Vector3(edge.x - at.x, edge.y - at.y, edge.z - at.z).let { sqrt(it.x * it.x + it.y * it.y + it.z * it.z) }
         lastGapM = if (r > 0f) p.nearest(at.x, at.y, at.z) * radiusM / r else Float.NaN
-        return p.dab(at.x, at.y, at.z, r, argb, erase)
+        return p.dab(at.x, at.y, at.z, r, argb, erase).also { if (it) painted = true }
     }
 
     /** Puts the painted texture on the ring. */
@@ -113,6 +113,31 @@ internal class GeneratedRingRig private constructor(
     /** Wipes the brush strokes off. */
     fun clearBrush() {
         painter?.clear() ?: return
+        painted = false
+        showBrush()
+    }
+
+    /** True once the brush (or a loaded colourway) has changed the ring's texture. */
+    private var painted = false
+
+    /** The painted texture as PNG, to save with a colourway; null when nothing was painted. */
+    suspend fun exportTexture(): ByteArray? {
+        val p = painter ?: return null
+        if (!painted) return null
+        val bitmap = Bitmap.createBitmap(p.width, p.height, Bitmap.Config.ARGB_8888)
+        p.writeTo(bitmap)
+        return withContext(Dispatchers.Default) {
+            java.io.ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        }.also { bitmap.recycle() }
+    }
+
+    /** Puts a colourway's painted texture (PNG bytes) on the ring. */
+    suspend fun loadTexture(png: ByteArray) {
+        val p = painter ?: return
+        val bitmap = withContext(Dispatchers.Default) { android.graphics.BitmapFactory.decodeByteArray(png, 0, png.size) } ?: return
+        p.load(bitmap)
+        bitmap.recycle()
+        painted = true
         showBrush()
     }
 

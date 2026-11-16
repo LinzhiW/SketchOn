@@ -1,6 +1,16 @@
 package com.example.gemtronicring.p4e7a91c3.data.remote
 
+import android.util.Base64
+import com.example.gemtronicring.p4e7a91c3.domain.model.Colourway
 import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
+import com.example.gemtronicring.p4e7a91c3.domain.model.MyColourway
+import com.example.gemtronicring.p4e7a91c3.domain.model.MyLibrary
+import com.example.gemtronicring.p4e7a91c3.domain.model.Notice
+import com.example.gemtronicring.p4e7a91c3.domain.model.NoticeKind
+import com.example.gemtronicring.p4e7a91c3.domain.model.RecordStatus
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingPage
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingRecord
+import org.json.JSONArray
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -54,7 +64,42 @@ interface SketchOnServer {
 
     /** Downloads a finished model into [target]. */
     suspend fun download(modelUrl: String, target: File)
+
+    // Colourways, likes, saves, wears and notifications (docs/colourways-plan.md).
+    // Defaults let a test double leave out what it does not use.
+
+    /** One ring's page. */
+    suspend fun ringPage(pieceId: String): RingPage = unsupported()
+
+    /** Saves the colours on a ring, with the painted texture as PNG bytes if there is one. */
+    suspend fun saveColourway(pieceId: String, paints: Map<Int, Int>, texturePng: ByteArray?): String = unsupported()
+
+    suspend fun deleteColourway(id: String): Unit = unsupported()
+
+    suspend fun featureColourway(id: String, on: Boolean): Unit = unsupported()
+
+    suspend fun hideColourway(id: String, on: Boolean): Unit = unsupported()
+
+    /** The ring's cover: one of the author's own colourways, or null for the render. */
+    suspend fun setCover(pieceId: String, colourwayId: String?): Unit = unsupported()
+
+    suspend fun deletePiece(pieceId: String): Unit = unsupported()
+
+    suspend fun like(kind: String, id: String, on: Boolean): Unit = unsupported()
+
+    suspend fun saveRing(pieceId: String, on: Boolean): Unit = unsupported()
+
+    /** Records that the user put on a ring, as made or in a colourway. */
+    suspend fun wear(pieceId: String, colourwayId: String?): Unit = unsupported()
+
+    suspend fun myLibrary(): MyLibrary = unsupported()
+
+    suspend fun notices(): List<Notice> = unsupported()
+
+    suspend fun markNoticesSeen(): Unit = unsupported()
 }
+
+private fun unsupported(): Nothing = throw IOException("not supported")
 
 sealed interface JobStatus {
     data object Running : JobStatus
@@ -120,9 +165,173 @@ class HttpSketchOnServer(private val baseUrl: String) : SketchOnServer {
                 material = if (p.isNull("material")) null else p.optString("material").ifBlank { null },
                 modelUrl = p.getString("modelUrl"),
                 pictureUrl = if (p.isNull("pictureUrl")) null else p.getString("pictureUrl"),
+                likes = p.optInt("likes"),
+                saves = p.optInt("saves"),
+                cover = p.optJSONObject("cover")?.let(::colourwayOf),
             )
         }
     }
+
+    override suspend fun ringPage(pieceId: String): RingPage {
+        val json = get("/api/pieces/$pieceId")
+        val p = json.getJSONObject("piece")
+        return RingPage(
+            piece =
+                GalleryPiece(
+                    id = p.getString("id"),
+                    name = p.textOrNull("name"),
+                    author = p.textOrNull("author"),
+                    material = p.textOrNull("material"),
+                    modelUrl = p.getString("modelUrl"),
+                    pictureUrl = p.textOrNull("pictureUrl"),
+                ),
+            isAuthor = p.optBoolean("isAuthor"),
+            coverId = p.textOrNull("cover"),
+            likes = json.optInt("likes"),
+            saves = json.optInt("saves"),
+            wearers = json.optInt("wearers"),
+            likedByMe = json.optBoolean("likedByMe"),
+            savedByMe = json.optBoolean("savedByMe"),
+            authorColourways = json.getJSONArray("authorColourways").objects().map(::colourwayOf),
+            otherColourways = json.getJSONArray("otherColourways").objects().map(::colourwayOf),
+        )
+    }
+
+    override suspend fun saveColourway(pieceId: String, paints: Map<Int, Int>, texturePng: ByteArray?): String {
+        val body = JSONObject().put("paints", JSONObject().apply { paints.forEach { (part, c) -> put(part.toString(), c) } })
+        texturePng?.let { body.put("texture", "data:image/png;base64," + Base64.encodeToString(it, Base64.NO_WRAP)) }
+        return post("/api/pieces/$pieceId/colourways", body, RENDER_TIMEOUT_MS).getString("id")
+    }
+
+    override suspend fun deleteColourway(id: String) {
+        send("DELETE", "/api/colourways/$id", null)
+    }
+
+    override suspend fun featureColourway(id: String, on: Boolean) {
+        post("/api/colourways/$id/feature", JSONObject().put("on", on), POLL_TIMEOUT_MS)
+    }
+
+    override suspend fun hideColourway(id: String, on: Boolean) {
+        post("/api/colourways/$id/hide", JSONObject().put("on", on), POLL_TIMEOUT_MS)
+    }
+
+    override suspend fun setCover(pieceId: String, colourwayId: String?) {
+        post("/api/pieces/$pieceId/cover", JSONObject().put("colourwayId", colourwayId ?: JSONObject.NULL), POLL_TIMEOUT_MS)
+    }
+
+    override suspend fun deletePiece(pieceId: String) {
+        send("DELETE", "/api/pieces/$pieceId", null)
+    }
+
+    override suspend fun like(kind: String, id: String, on: Boolean) {
+        post("/api/likes", JSONObject().put("kind", kind).put("id", id).put("on", on), POLL_TIMEOUT_MS)
+    }
+
+    override suspend fun saveRing(pieceId: String, on: Boolean) {
+        post("/api/saves", JSONObject().put("pieceId", pieceId).put("on", on), POLL_TIMEOUT_MS)
+    }
+
+    override suspend fun wear(pieceId: String, colourwayId: String?) {
+        post("/api/wears", JSONObject().put("pieceId", pieceId).put("colourwayId", colourwayId ?: JSONObject.NULL), POLL_TIMEOUT_MS)
+    }
+
+    override suspend fun myLibrary(): MyLibrary {
+        val json = get("/api/me/library")
+        return MyLibrary(
+            rings =
+                json.getJSONArray("rings").objects().map { r ->
+                    GalleryPiece(
+                        id = r.getString("id"),
+                        name = r.textOrNull("name"),
+                        author = null,
+                        material = r.textOrNull("material"),
+                        modelUrl = r.getString("modelUrl"),
+                        pictureUrl = r.textOrNull("pictureUrl"),
+                    )
+                },
+            colourways =
+                json.getJSONArray("colourways").objects().map { c ->
+                    MyColourway(
+                        colourway = colourwayOf(c),
+                        pieceName = c.textOrNull("pieceName"),
+                        pieceAuthor = c.textOrNull("pieceAuthor"),
+                        onMyRing = c.optBoolean("onMyRing"),
+                        status = RecordStatus.of(c.textOrNull("status")),
+                    )
+                },
+            saved =
+                json.getJSONArray("saved").objects().map { s ->
+                    RingRecord(s.getString("id"), s.textOrNull("name"), s.textOrNull("author"), RecordStatus.of(s.textOrNull("status")))
+                },
+            worn =
+                json.getJSONArray("wears").objects().map { w ->
+                    RingRecord(
+                        pieceId = w.getString("pieceId"),
+                        name = w.textOrNull("name"),
+                        author = w.textOrNull("author"),
+                        status = RecordStatus.of(w.textOrNull("status")),
+                        colourwayId = w.textOrNull("colourwayId"),
+                        paints = w.optJSONObject("paints")?.let(::paintsOf),
+                    )
+                },
+        )
+    }
+
+    override suspend fun notices(): List<Notice> =
+        get("/api/notifications").getJSONArray("notifications").objects().map { n ->
+            Notice(
+                id = n.getLong("id"),
+                kind = if (n.optString("kind") == "featured") NoticeKind.Featured else NoticeKind.Recoloured,
+                pieceId = n.getString("pieceId"),
+                pieceName = n.textOrNull("pieceName"),
+                actor = n.optString("actor"),
+                seen = n.optBoolean("seen"),
+            )
+        }
+
+    override suspend fun markNoticesSeen() {
+        post("/api/notifications/seen", JSONObject(), POLL_TIMEOUT_MS)
+    }
+
+    private fun colourwayOf(c: JSONObject) =
+        Colourway(
+            id = c.getString("id"),
+            pieceId = c.getString("pieceId"),
+            author = c.optString("author"),
+            paints = c.optJSONObject("paints")?.let(::paintsOf) ?: emptyMap(),
+            textureUrl = c.textOrNull("textureUrl"),
+            pictureUrl = c.textOrNull("pictureUrl"),
+            featured = c.optBoolean("featured"),
+            hidden = c.optBoolean("hidden"),
+            likes = c.optInt("likes"),
+            likedByMe = c.optBoolean("likedByMe"),
+            wearers = c.optInt("wearers"),
+        )
+
+    private fun paintsOf(p: JSONObject): Map<Int, Int> =
+        p.keys().asSequence().mapNotNull { k -> k.toIntOrNull()?.let { it to p.getInt(k) } }.toMap()
+
+    private fun JSONObject.textOrNull(key: String): String? = if (isNull(key)) null else optString(key).ifBlank { null }
+
+    private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
+
+    /** A request with an optional JSON body, for verbs other than GET and POST. */
+    private suspend fun send(method: String, path: String, body: JSONObject?): JSONObject =
+        withContext(Dispatchers.IO) {
+            val connection = open(path, POLL_TIMEOUT_MS)
+            try {
+                connection.requestMethod = method
+                if (body != null) {
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.outputStream.use { it.write(body.toString().toByteArray()) }
+                }
+                check(connection)
+                JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            } finally {
+                connection.disconnect()
+            }
+        }
 
     override suspend fun bytes(url: String): ByteArray =
         withContext(Dispatchers.IO) {

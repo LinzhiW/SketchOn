@@ -6,7 +6,12 @@ import com.example.gemtronicring.p4e7a91c3.data.remote.NotLoggedInException
 import com.example.gemtronicring.p4e7a91c3.data.remote.Session
 import com.example.gemtronicring.p4e7a91c3.data.remote.SketchOnServer
 import com.example.gemtronicring.p4e7a91c3.data.repository.BundledRingMenuRepository
+import com.example.gemtronicring.p4e7a91c3.domain.model.Colourway
 import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
+import com.example.gemtronicring.p4e7a91c3.domain.model.MyLibrary
+import com.example.gemtronicring.p4e7a91c3.domain.model.Notice
+import com.example.gemtronicring.p4e7a91c3.domain.model.NoticeKind
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingPage
 import com.example.gemtronicring.p4e7a91c3.domain.model.Material
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
@@ -20,6 +25,7 @@ import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -104,6 +110,48 @@ private class FakeServer : SketchOnServer {
         if (++jobPolls < 2) JobStatus.Running else JobStatus.Done("/models/job-1.glb")
 
     override suspend fun download(modelUrl: String, target: File) = target.writeText("glb")
+
+    // Colourways: records what the app sent.
+    val savedColourways = mutableListOf<Triple<String, Map<Int, Int>, ByteArray?>>()
+    val wears = mutableListOf<String>()
+    val likes = mutableListOf<String>()
+    var noticesSeen = false
+    val fork = Colourway("cw1", "piece-2", "Fan", mapOf(0 to 0xFF0090FF.toInt()), textureUrl = "/colourways/cw1.png")
+
+    override suspend fun saveColourway(pieceId: String, paints: Map<Int, Int>, texturePng: ByteArray?): String {
+        savedColourways += Triple(pieceId, paints, texturePng)
+        return "cw-new"
+    }
+
+    override suspend fun ringPage(pieceId: String) =
+        RingPage(
+            piece = GalleryPiece(pieceId, "Cloud Ring", "Ana", "clay", "/models/$pieceId.glb", "/models/$pieceId.jpg"),
+            isAuthor = false,
+            coverId = null,
+            likes = likes.size,
+            saves = 0,
+            wearers = 0,
+            likedByMe = likes.isNotEmpty(),
+            savedByMe = false,
+            authorColourways = emptyList(),
+            otherColourways = listOf(fork),
+        )
+
+    override suspend fun wear(pieceId: String, colourwayId: String?) {
+        wears += "$pieceId/${colourwayId ?: "as made"}"
+    }
+
+    override suspend fun like(kind: String, id: String, on: Boolean) {
+        if (on) likes += "$kind/$id" else likes.remove("$kind/$id")
+    }
+
+    override suspend fun myLibrary() = MyLibrary()
+
+    override suspend fun notices() = listOf(Notice(1, NoticeKind.Recoloured, "piece-2", "Cloud Ring", "Fan", seen = noticesSeen))
+
+    override suspend fun markNoticesSeen() {
+        noticesSeen = true
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -443,5 +491,101 @@ class RingWearViewModelTest {
         viewModel.onEvent(RingWearEvent.PaintRing(0xFF0090FF.toInt()))
         assertEquals(false, viewModel.state.value.erasing)
         assertEquals(0xFF0090FF.toInt(), viewModel.state.value.brushColor)
+    }
+
+    private fun TestScope.openCloudRing() {
+        viewModel.onEvent(RingWearEvent.OpenRing("piece-2"))
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `wearing a colourway puts on its colours and brushwork, and is recorded`() = runTest(dispatcher) {
+        openCloudRing()
+        assertEquals(RingPhase.RingPage, viewModel.state.value.phase)
+        viewModel.onEvent(RingWearEvent.WearColourway(server.fork))
+        advanceUntilIdle()
+        val state = viewModel.state.value
+        assertEquals(RingPhase.FingerChoosing, state.phase)
+        assertEquals("piece-2", state.pieceId)
+        assertEquals(server.fork.paints, state.paints)
+        assertEquals("/colourways/cw1.png", state.textureToLoad?.decodeToString())
+        assertEquals(listOf("piece-2/cw1"), server.wears)
+    }
+
+    @Test
+    fun `recolouring goes to painting from a clean ring and is not a wear`() = runTest(dispatcher) {
+        openCloudRing()
+        viewModel.onEvent(RingWearEvent.Recolour)
+        advanceUntilIdle()
+        val state = viewModel.state.value
+        assertEquals(RingPhase.Painting, state.phase)
+        assertTrue(state.paints.isEmpty())
+        assertNull(state.textureToLoad)
+        assertTrue(server.wears.isEmpty())
+    }
+
+    @Test
+    fun `saving with the brush asks the stage for the texture, then uploads it`() = runTest(dispatcher) {
+        openCloudRing()
+        viewModel.onEvent(RingWearEvent.Recolour)
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.BrushAvailable(true))
+        val asked = viewModel.state.value.textureRequest
+        viewModel.onEvent(RingWearEvent.SaveColourway)
+        assertEquals(asked + 1, viewModel.state.value.textureRequest)
+        assertTrue(viewModel.state.value.saveColour.saving)
+        viewModel.onEvent(RingWearEvent.TextureExported(byteArrayOf(1, 2, 3)))
+        advanceUntilIdle()
+        assertEquals("piece-2", server.savedColourways.single().first)
+        assertTrue(server.savedColourways.single().third!!.contentEquals(byteArrayOf(1, 2, 3)))
+        assertTrue(viewModel.state.value.saveColour.saved)
+    }
+
+    @Test
+    fun `saving colours without the brush sends the whole-ring colours only`() = runTest(dispatcher) {
+        openCloudRing()
+        viewModel.onEvent(RingWearEvent.Recolour)
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.SetBrush(false))
+        viewModel.onEvent(RingWearEvent.PaintRing(0xFFE5484D.toInt()))
+        viewModel.onEvent(RingWearEvent.SaveColourway)
+        advanceUntilIdle()
+        val (_, paints, texture) = server.savedColourways.single()
+        assertEquals(mapOf(0 to 0xFFE5484D.toInt()), paints)
+        assertNull(texture)
+    }
+
+    @Test
+    fun `saving colours needs an account`() = runTest(dispatcher) {
+        openCloudRing()
+        viewModel.onEvent(RingWearEvent.Recolour)
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.LogOut)
+        advanceUntilIdle()
+        viewModel.onEvent(RingWearEvent.SaveColourway)
+        assertTrue(viewModel.state.value.saveColour.needsLogin)
+        assertTrue(server.savedColourways.isEmpty())
+    }
+
+    @Test
+    fun `a like on the ring page is sent and the page is loaded again`() = runTest(dispatcher) {
+        openCloudRing()
+        viewModel.onEvent(RingWearEvent.LikeRing(true))
+        advanceUntilIdle()
+        assertEquals(listOf("piece/piece-2"), server.likes)
+        assertEquals(1, viewModel.state.value.ringPage.page?.likes)
+        assertEquals(true, viewModel.state.value.ringPage.page?.likedByMe)
+    }
+
+    @Test
+    fun `opening the notifications marks them seen`() = runTest(dispatcher) {
+        viewModel.onEvent(RingWearEvent.OpenMine)
+        advanceUntilIdle()
+        assertEquals(RingPhase.Mine, viewModel.state.value.phase)
+        assertEquals(1, viewModel.state.value.mine.unseen)
+        viewModel.onEvent(RingWearEvent.ChooseMineTab(MineTab.Notices))
+        advanceUntilIdle()
+        assertTrue(server.noticesSeen)
+        assertEquals(0, viewModel.state.value.mine.unseen)
     }
 }

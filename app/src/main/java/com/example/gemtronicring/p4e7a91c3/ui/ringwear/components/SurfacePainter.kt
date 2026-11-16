@@ -139,6 +139,15 @@ internal class SurfacePainter(val surface: RingSurface) {
     /** Back to the texture the ring was made with. */
     fun clear() = original.copyInto(pixels)
 
+    /** Takes over a saved painting (a colourway's texture), scaled to this ring's texture. */
+    fun load(painting: Bitmap) {
+        val fitted =
+            if (painting.width == width && painting.height == height) painting
+            else Bitmap.createScaledBitmap(painting, width, height, true)
+        fitted.getPixels(pixels, 0, width, 0, 0, width, height)
+        if (fitted !== painting) fitted.recycle()
+    }
+
     /** The painted texture, written into [into] (same size as the ring's texture). */
     fun writeTo(into: Bitmap) = into.setPixels(pixels, 0, width, 0, 0, width, height)
 

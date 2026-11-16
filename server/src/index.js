@@ -343,7 +343,11 @@ async function socialRoute(req, url) {
   if (req.method === "GET" && url === "/api/me/library") {
     const { user } = await userOf(req);
     const mine = await db.mine(user);
-    return { ...mine, colourways: mine.colourways.map(withUrls) };
+    return {
+      ...mine,
+      rings: mine.rings.map((r) => ({ ...r, modelUrl: fileUrl(r.id, "glb"), pictureUrl: fileUrl(r.id, "jpg") })),
+      colourways: mine.colourways.map(withUrls),
+    };
   }
   if (req.method === "GET" && url === "/api/notifications") {
     const { user } = await userOf(req);

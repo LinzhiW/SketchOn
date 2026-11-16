@@ -55,6 +55,10 @@ data class GalleryPiece(
     val material: String?,
     val modelUrl: String,
     val pictureUrl: String?,
+    val likes: Int = 0,
+    val saves: Int = 0,
+    /** The author's colourway chosen as the cover, or null for the render as it was made. */
+    val cover: Colourway? = null,
 )
 
 /** A point of a stroke, in the drawing's own pixels. */

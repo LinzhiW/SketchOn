@@ -82,8 +82,10 @@ private fun StepPanels(state: RingWearUiState, drafts: TextDrafts, onEvent: (Rin
 internal fun CenterPanel(state: RingWearUiState, drafts: TextDrafts, onEvent: (RingWearEvent) -> Unit) {
     when (state.phase) {
         RingPhase.Login -> LoginPanel(state.login, drafts, onEvent)
-        RingPhase.Home -> HomePanel(state.user, onEvent)
+        RingPhase.Home -> HomePanel(state.user, state.mine.unseen, onEvent)
         RingPhase.Gallery -> GalleryPanel(state.gallery, onEvent)
+        RingPhase.RingPage -> RingPagePanel(state.ringPage, state.gallery.opening != null, onEvent)
+        RingPhase.Mine -> MinePanel(state.mine, onEvent)
         RingPhase.Sketching -> SketchPanel(state.sketch, onEvent)
         RingPhase.Naming -> NamingPanel(state.sketch, drafts, onEvent)
         RingPhase.Making3D -> Making3dPanel(state.sketch, onEvent)

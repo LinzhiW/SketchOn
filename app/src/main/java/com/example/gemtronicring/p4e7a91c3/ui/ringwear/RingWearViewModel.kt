@@ -8,6 +8,7 @@ import com.example.gemtronicring.p4e7a91c3.data.remote.JobStatus
 import com.example.gemtronicring.p4e7a91c3.data.remote.NotLoggedInException
 import com.example.gemtronicring.p4e7a91c3.data.remote.Session
 import com.example.gemtronicring.p4e7a91c3.data.remote.SketchOnServer
+import com.example.gemtronicring.p4e7a91c3.domain.model.Colourway
 import com.example.gemtronicring.p4e7a91c3.domain.model.MenuCursor
 import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.Material
@@ -56,6 +57,7 @@ class RingWearViewModel(
     private var jobId: String? = null
     private var pendingName: String? = null
     private var madePiece: Pair<RingPiece, Boolean>? = null
+    private var madeId: String? = null
     private var named = false
 
     /**
@@ -132,15 +134,35 @@ class RingWearViewModel(
                         !it.paintable -> it
                         // Picking a colour means painting with it, so the eraser goes off.
                         it.brush && it.brushAvailable -> it.copy(brushColor = event.color, erasing = false)
-                        else -> it.copy(paints = (0 until it.parts).associateWith { event.color })
+                        else ->
+                            it.copy(
+                                paints = (0 until it.parts).associateWith { event.color },
+                                saveColour = SaveColourUiState(),
+                            )
                     }
                 }
             is RingWearEvent.SetBrush -> _state.update { it.copy(brush = event.on) }
             is RingWearEvent.ControllersSeen -> _state.update { it.copy(controllersSeen = event.seen) }
             is RingWearEvent.BrushAvailable -> _state.update { it.copy(brushAvailable = event.available) }
-            RingWearEvent.ClearBrush -> _state.update { it.copy(brushClear = it.brushClear + 1, paints = emptyMap()) }
+            RingWearEvent.ClearBrush ->
+                _state.update { it.copy(brushClear = it.brushClear + 1, paints = emptyMap(), saveColour = SaveColourUiState()) }
             is RingWearEvent.SetBrushSize -> _state.update { it.copy(brushSize = event.size.coerceIn(0f, 1f)) }
             is RingWearEvent.SetErasing -> _state.update { it.copy(erasing = event.on) }
+            RingWearEvent.SaveColourway -> saveColourway()
+            is RingWearEvent.TextureExported -> uploadColourway(event.png)
+            is RingWearEvent.OpenRing -> openRing(event.pieceId)
+            is RingWearEvent.WearColourway -> wearFromPage(event.colourway, recolour = false)
+            RingWearEvent.Recolour -> wearFromPage(null, recolour = true)
+            is RingWearEvent.LikeRing -> pageAction { server.like("piece", it, event.on) }
+            is RingWearEvent.SaveRing -> pageAction { server.saveRing(it, event.on) }
+            is RingWearEvent.LikeColourway -> pageAction { server.like("colourway", event.id, event.on) }
+            is RingWearEvent.SetCover -> pageAction { server.setCover(it, event.id) }
+            is RingWearEvent.FeatureColourway -> pageAction { server.featureColourway(event.id, event.on) }
+            is RingWearEvent.HideColourway -> pageAction { server.hideColourway(event.id, event.on) }
+            is RingWearEvent.DeleteColourway -> pageAction { server.deleteColourway(event.id) }
+            is RingWearEvent.DeleteRing -> deleteRing(event.sure)
+            RingWearEvent.OpenMine -> openMine()
+            is RingWearEvent.ChooseMineTab -> chooseMineTab(event.tab)
             is RingWearEvent.MoveRing ->
                 _state.update {
                     it.copy(
@@ -229,8 +251,12 @@ class RingWearViewModel(
                 _state.update {
                     it.copy(
                         piece = RingPiece.Generated(file.absolutePath),
+                        pieceId = piece.id,
                         paintable = Material.byId(piece.material)?.metal == false,
                         paints = emptyMap(),
+                        textureToLoad = null,
+                        textureLoad = it.textureLoad + 1,
+                        saveColour = SaveColourUiState(),
                         turnYaw = 0f,
                         turnPitch = 0f,
                         gallery = it.gallery.copy(opening = null),
@@ -243,6 +269,196 @@ class RingWearViewModel(
                 log("wear failed: ${e.javaClass.simpleName}: ${reasonOf(e)}")
                 _state.update { it.copy(gallery = it.gallery.copy(opening = null, error = reasonOf(e))) }
             }
+        }
+    }
+
+    // ---- Colourways, ring pages and my library (docs/colourways-plan.md) ----
+
+    /**
+     * Saving needs an account. With a painted texture, the stage is asked for it first and
+     * the upload follows in [uploadColourway]; without the brush, only the colours go.
+     */
+    private fun saveColourway() {
+        val s = _state.value
+        if (s.saveColour.saving || s.pieceId == null) return
+        if (s.user == null) {
+            _state.update { it.copy(saveColour = SaveColourUiState(needsLogin = true)) }
+            return
+        }
+        _state.update { it.copy(saveColour = SaveColourUiState(saving = true)) }
+        if (s.brushAvailable) _state.update { it.copy(textureRequest = it.textureRequest + 1) } else uploadColourway(null)
+    }
+
+    private fun uploadColourway(png: ByteArray?) {
+        val s = _state.value
+        val pieceId = s.pieceId ?: return
+        if (!s.saveColour.saving) return
+        viewModelScope.launch {
+            try {
+                val id = server.saveColourway(pieceId, s.paints, png)
+                log("colourway saved: $id (${png?.size ?: 0} bytes of texture)")
+                _state.update { it.copy(saveColour = SaveColourUiState(saved = true)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: NotLoggedInException) {
+                _state.update { it.copy(saveColour = SaveColourUiState(needsLogin = true)) }
+            } catch (e: Exception) {
+                log("colourway not saved: ${reasonOf(e)}")
+                _state.update { it.copy(saveColour = SaveColourUiState(error = reasonOf(e))) }
+            }
+        }
+    }
+
+    private fun openRing(pieceId: String) {
+        _state.update { it.copy(ringPage = RingPageUiState(loading = true)) }
+        enter(RingPhase.RingPage)
+        loadRingPage(pieceId)
+    }
+
+    private fun loadRingPage(pieceId: String) {
+        viewModelScope.launch {
+            try {
+                val page = server.ringPage(pieceId)
+                _state.update { it.copy(ringPage = it.ringPage.copy(page = page, loading = false, error = null)) }
+                val picture =
+                    _state.value.gallery.pictures[pieceId]
+                        ?: page.piece.pictureUrl?.let { url -> runCatching { server.bytes(url) }.getOrNull() }
+                _state.update { it.copy(ringPage = it.ringPage.copy(picture = picture)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("ring page failed: ${reasonOf(e)}")
+                _state.update { it.copy(ringPage = it.ringPage.copy(loading = false, error = reasonOf(e))) }
+            }
+        }
+    }
+
+    /**
+     * A like, save or author's choice on the open ring page, then the page again so the counts
+     * are the server's. Likes and saves need an account.
+     */
+    private fun pageAction(call: suspend (pieceId: String) -> Unit) {
+        val pieceId = _state.value.ringPage.page?.piece?.id ?: return
+        if (_state.value.user == null) {
+            _state.update { it.copy(ringPage = it.ringPage.copy(error = NEEDS_LOGIN)) }
+            return
+        }
+        viewModelScope.launch {
+            try {
+                call(pieceId)
+                loadRingPage(pieceId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(ringPage = it.ringPage.copy(error = reasonOf(e))) }
+            }
+        }
+    }
+
+    private fun deleteRing(sure: Boolean) {
+        if (!sure) {
+            _state.update { it.copy(ringPage = it.ringPage.copy(confirmDelete = true)) }
+            return
+        }
+        val pieceId = _state.value.ringPage.page?.piece?.id ?: return
+        viewModelScope.launch {
+            try {
+                server.deletePiece(pieceId)
+                log("ring deleted: $pieceId")
+                _state.update { it.copy(ringPage = RingPageUiState()) }
+                openGallery()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(ringPage = it.ringPage.copy(error = reasonOf(e), confirmDelete = false)) }
+            }
+        }
+    }
+
+    /**
+     * Puts on the ring on the open page: as made, in a colourway (its colours and painted
+     * texture), or to colour anew. The wear is recorded when signed in.
+     */
+    private fun wearFromPage(colourway: Colourway?, recolour: Boolean) {
+        val page = _state.value.ringPage.page ?: return
+        if (_state.value.gallery.opening != null) return
+        _state.update { it.copy(gallery = it.gallery.copy(opening = page.piece.id), ringPage = it.ringPage.copy(error = null)) }
+        viewModelScope.launch {
+            try {
+                val file = modelFile(page.piece.id)
+                if (!file.exists()) server.download(page.piece.modelUrl, file)
+                val texture = colourway?.textureUrl?.let { url -> runCatching { server.bytes(url) }.getOrNull() }
+                val paintable = Material.byId(page.piece.material)?.metal == false
+                _state.update {
+                    it.copy(
+                        piece = RingPiece.Generated(file.absolutePath),
+                        pieceId = page.piece.id,
+                        paintable = paintable,
+                        paints = colourway?.paints ?: emptyMap(),
+                        textureToLoad = texture,
+                        textureLoad = it.textureLoad + 1,
+                        saveColour = SaveColourUiState(),
+                        turnYaw = 0f,
+                        turnPitch = 0f,
+                        gallery = it.gallery.copy(opening = null),
+                    )
+                }
+                if (!recolour && _state.value.user != null) {
+                    runCatching { server.wear(page.piece.id, colourway?.id) }
+                        .onFailure { log("wear not recorded: ${it.message}") }
+                }
+                enter(if (recolour && paintable) RingPhase.Painting else RingPhase.FingerChoosing)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("wear failed: ${reasonOf(e)}")
+                _state.update { it.copy(gallery = it.gallery.copy(opening = null), ringPage = it.ringPage.copy(error = reasonOf(e))) }
+            }
+        }
+    }
+
+    private fun openMine() {
+        if (_state.value.user == null) {
+            onEvent(RingWearEvent.OpenLogin)
+            return
+        }
+        _state.update { it.copy(mine = it.mine.copy(loading = true, error = null)) }
+        enter(RingPhase.Mine)
+        viewModelScope.launch {
+            try {
+                val library = server.myLibrary()
+                val notices = server.notices()
+                _state.update {
+                    it.copy(
+                        mine = it.mine.copy(library = library, notices = notices, unseen = notices.count { n -> !n.seen }, loading = false)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("my library failed: ${reasonOf(e)}")
+                _state.update { it.copy(mine = it.mine.copy(loading = false, error = reasonOf(e))) }
+            }
+        }
+    }
+
+    /** Opening the notifications marks them seen. */
+    private fun chooseMineTab(tab: MineTab) {
+        _state.update { it.copy(mine = it.mine.copy(tab = tab)) }
+        if (tab == MineTab.Notices && _state.value.mine.unseen > 0) {
+            viewModelScope.launch {
+                runCatching { server.markNoticesSeen() }
+                    .onSuccess { _state.update { it.copy(mine = it.mine.copy(unseen = 0)) } }
+            }
+        }
+    }
+
+    /** How many notifications are new, for the home panel. Quietly does nothing on failure. */
+    private fun refreshUnseen() {
+        if (_state.value.user == null) return
+        viewModelScope.launch {
+            runCatching { server.notices() }
+                .onSuccess { notices -> _state.update { it.copy(mine = it.mine.copy(unseen = notices.count { n -> !n.seen })) } }
         }
     }
 
@@ -382,6 +598,7 @@ class RingWearViewModel(
                             val file = modelFile(id)
                             if (!file.exists()) server.download(result.modelUrl, file)
                             madePiece = RingPiece.Generated(file.absolutePath) to !material.metal
+                            madeId = id
                             log("3D job done, model saved")
                             wearIfReady()
                         }
@@ -436,8 +653,12 @@ class RingWearViewModel(
         _state.update {
             it.copy(
                 piece = piece,
+                pieceId = madeId,
                 paintable = paintable,
                 paints = emptyMap(),
+                textureToLoad = null,
+                textureLoad = it.textureLoad + 1,
+                saveColour = SaveColourUiState(),
                 turnYaw = 0f,
                 turnPitch = 0f,
                 madeRing = null,
@@ -471,6 +692,7 @@ class RingWearViewModel(
     private fun goHome() {
         history.clear()
         show(RingPhase.Home)
+        refreshUnseen()
     }
 
     private fun goBack() {
@@ -534,6 +756,7 @@ class RingWearViewModel(
         }
 
     companion object {
+        const val NEEDS_LOGIN = "Log in to like, save or colour rings."
         private const val TAG = "SketchOn"
         private const val SCALE_STEP = 1.25f
         private const val MIN_RING_SCALE = 0.5f

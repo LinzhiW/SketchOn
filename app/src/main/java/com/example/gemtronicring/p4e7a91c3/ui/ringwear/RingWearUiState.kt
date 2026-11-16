@@ -1,6 +1,10 @@
 package com.example.gemtronicring.p4e7a91c3.ui.ringwear
 
+import com.example.gemtronicring.p4e7a91c3.domain.model.Colourway
 import com.example.gemtronicring.p4e7a91c3.domain.model.DesignStyle
+import com.example.gemtronicring.p4e7a91c3.domain.model.MyLibrary
+import com.example.gemtronicring.p4e7a91c3.domain.model.Notice
+import com.example.gemtronicring.p4e7a91c3.domain.model.RingPage
 import com.example.gemtronicring.p4e7a91c3.domain.model.GalleryPiece
 import com.example.gemtronicring.p4e7a91c3.domain.model.Material
 import com.example.gemtronicring.p4e7a91c3.domain.model.RingGesture
@@ -56,6 +60,54 @@ data class RingWearUiState(
     val moveX: Float = 0f,
     val moveY: Float = 0f,
     val moveZ: Float = 0f,
+    /** The server id of the generated ring on show (its 3D job id), or null for the Gemtronic ring. */
+    val pieceId: String? = null,
+    /** Bumped to ask the stage for the painted texture, to save it with the colourway. */
+    val textureRequest: Int = 0,
+    /** A colourway's painted texture (PNG bytes) for the stage to put on the ring, or null. */
+    val textureToLoad: ByteArray? = null,
+    /** Bumped each time [textureToLoad] changes, so the same bytes can be loaded again. */
+    val textureLoad: Int = 0,
+    val saveColour: SaveColourUiState = SaveColourUiState(),
+    val ringPage: RingPageUiState = RingPageUiState(),
+    val mine: MineUiState = MineUiState(),
+)
+
+/** Saving the colours on the ring being painted. */
+data class SaveColourUiState(
+    val saving: Boolean = false,
+    /** True once these colours are saved; any change to them clears it. */
+    val saved: Boolean = false,
+    /** Saving needs an account: shown with a log in button. */
+    val needsLogin: Boolean = false,
+    val error: String? = null,
+)
+
+data class RingPageUiState(
+    val page: RingPage? = null,
+    /** The ring's render, as image file bytes. */
+    val picture: ByteArray? = null,
+    val loading: Boolean = false,
+    /** Asking before the author deletes the ring. */
+    val confirmDelete: Boolean = false,
+    val error: String? = null,
+)
+
+enum class MineTab {
+    Creations,
+    Saved,
+    Worn,
+    Notices,
+}
+
+data class MineUiState(
+    val tab: MineTab = MineTab.Creations,
+    val library: MyLibrary? = null,
+    val notices: List<Notice> = emptyList(),
+    /** Notifications not yet seen, for the dot on the home panel. */
+    val unseen: Int = 0,
+    val loading: Boolean = false,
+    val error: String? = null,
 )
 
 /** A 3D ring made in the background, for the notice shown above every panel. */
@@ -142,6 +194,43 @@ sealed interface RingWearEvent {
 
     /** Wipes the brush strokes off. */
     data object ClearBrush : RingWearEvent
+
+    /** Saves the colours on the ring being painted as a colourway. */
+    data object SaveColourway : RingWearEvent
+
+    /** The stage's answer to a texture request: the painted texture as PNG, or null if unpainted. */
+    data class TextureExported(val png: ByteArray?) : RingWearEvent
+
+    /** Opens a ring's page. */
+    data class OpenRing(val pieceId: String) : RingWearEvent
+
+    /** Puts on the ring on the open page, as made (null) or in a colourway. */
+    data class WearColourway(val colourway: Colourway?) : RingWearEvent
+
+    /** Colours the ring on the open page anew, to save as one's own colourway. */
+    data object Recolour : RingWearEvent
+
+    data class LikeRing(val on: Boolean) : RingWearEvent
+
+    data class SaveRing(val on: Boolean) : RingWearEvent
+
+    data class LikeColourway(val id: String, val on: Boolean) : RingWearEvent
+
+    /** Author only: the cover is one of their own colourways. */
+    data class SetCover(val id: String) : RingWearEvent
+
+    data class FeatureColourway(val id: String, val on: Boolean) : RingWearEvent
+
+    data class HideColourway(val id: String, val on: Boolean) : RingWearEvent
+
+    data class DeleteColourway(val id: String) : RingWearEvent
+
+    /** Author only. The first press asks; the second ([sure]) deletes. */
+    data class DeleteRing(val sure: Boolean) : RingWearEvent
+
+    data object OpenMine : RingWearEvent
+
+    data class ChooseMineTab(val tab: MineTab) : RingWearEvent
 
     /** The brush size from the panel's slider, 0 to 1. */
     data class SetBrushSize(val size: Float) : RingWearEvent

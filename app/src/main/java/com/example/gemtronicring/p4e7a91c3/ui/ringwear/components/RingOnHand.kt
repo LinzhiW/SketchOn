@@ -270,6 +270,21 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
     LaunchedEffect(rig, state.brushClear) {
         if (state.brushClear > 0) (rig as? GeneratedRingRig)?.clearBrush()
     }
+    // Saving a colourway: the view model asks for the painted texture, and gets it (or null).
+    LaunchedEffect(state.textureRequest) {
+        if (state.textureRequest == 0) return@LaunchedEffect
+        val png = (rig as? GeneratedRingRig)?.exportTexture()
+        Log.i(TAG, "texture for the colourway: ${png?.size ?: 0} bytes")
+        currentOnEvent(RingWearEvent.TextureExported(png))
+    }
+    // Wearing a colourway: its painted texture goes on once the ring's surface has been read.
+    LaunchedEffect(rig, brushReady, state.textureLoad) {
+        val ring = rig as? GeneratedRingRig ?: return@LaunchedEffect
+        val png = state.textureToLoad ?: return@LaunchedEffect
+        if (!brushReady) return@LaunchedEffect
+        ring.loadTexture(png)
+        Log.i(TAG, "colourway texture put on the ring: ${png.size} bytes")
+    }
     val brushColor by rememberUpdatedState(state.brushColor)
     val brushRadiusM by rememberUpdatedState(brushRadius(state.brushSize))
     val erasing by rememberUpdatedState(state.erasing)
