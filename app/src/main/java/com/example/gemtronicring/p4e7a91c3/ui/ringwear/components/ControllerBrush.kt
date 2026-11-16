@@ -20,8 +20,8 @@ internal sealed interface Swatch {
 }
 
 /**
- * Painting with the controllers: the right one is the brush (its tip shows the colour), the
- * left one carries a palette of colours, an eraser and three brush sizes, picked by touching
+ * Painting with the controllers: the right one is the brush. Where its ray meets the ring a dot
+ * in the colour shows, and the trigger paints there. The left one carries a palette of colours, an eraser and three brush sizes, picked by touching
  * them with the brush tip.
  */
 internal class ControllerBrush(private val stageRoot: Entity) {
@@ -66,7 +66,10 @@ internal class ControllerBrush(private val stageRoot: Entity) {
         swatches += swatch to e
     }
 
-    /** Where the brush paints: a little ahead of the controller, in the container's space. */
+    /** Which way the controller points (its ray), in the container's space. */
+    fun forwardOf(pose: ControllerPose): Vector3 = pose.rotation.rotateVector(Vector3(0f, 0f, -1f))
+
+    /** The brush tip a little ahead of the controller, in the container's space: picks swatches. */
     fun tipOf(right: ControllerPose): Vector3 {
         val ahead = right.rotation.rotateVector(Vector3(0f, 0f, -TIP_AHEAD_M))
         return Vector3(right.position.x + ahead.x, right.position.y + ahead.y, right.position.z + ahead.z)
@@ -76,12 +79,13 @@ internal class ControllerBrush(private val stageRoot: Entity) {
      * Shows the brush tip and the palette where the controllers are (null hides them), and
      * marks the chosen colour, eraser and size.
      */
-    fun show(left: ControllerPose?, right: ControllerPose?, argb: Int, erasing: Boolean, size: Int) {
+    fun show(left: ControllerPose?, right: ControllerPose?, argb: Int, erasing: Boolean, size: Int, aimAt: Vector3? = null) {
         tip.enabled = right != null
         if (right != null) {
             val r = SIZES_M[size]
             tip.components[TransformComponent::class.java]?.apply {
-                setPosition(stageRoot.convertPositionFrom(tipOf(right), null))
+                // On the ring where the controller points; otherwise just ahead of it.
+                setPosition(stageRoot.convertPositionFrom(aimAt ?: tipOf(right), null))
                 setScaleVector(Vector3(r, r, r))
             }
             tipMaterial.setBaseColor(colour(if (erasing) ERASER_GREY else argb))

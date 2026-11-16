@@ -50,7 +50,7 @@ object LaunchIntroState {
 }
 
 /**
- * The opening animation. It fills the whole view for about three seconds: a soft mint-to-lilac
+ * The opening animation. It fills the whole view for about seven seconds: a soft mint-to-lilac
  * sky closes the room off, a glowing pen draws a ring, the ring turns solid, its stone lights up
  * and the name appears. Then the sky fades away and the room shows again.
  *
@@ -90,15 +90,18 @@ fun LaunchIntro(onDone: () -> Unit) {
 }
 
 // Timeline, in milliseconds from the first frame.
-private const val T_DRAW_START = 250L
-private const val T_DRAW_END = 1450L
-private const val T_SOLID_END = 1950L
-private const val T_GEM_START = 1800L
-private const val T_GEM_END = 2300L
-private const val T_NAME_START = 2100L
-private const val T_NAME_END = 2650L
-private const val T_FADE_START = 3300L
-private const val T_END = 4000L
+// About twice the first cut (4 s): on a headset that went by before the eye could follow it.
+private const val T_DRAW_START = 400L
+private const val T_DRAW_END = 2900L
+private const val T_SOLID_END = 3700L
+private const val T_GEM_START = 3400L
+private const val T_GEM_END = 4300L
+private const val T_NAME_START = 4000L
+private const val T_NAME_END = 5000L
+private const val T_FADE_START = 6500L
+private const val T_END = 7500L
+private const val SPARKLE_STEP_MS = 250L
+private const val SPARKLE_MS = 1000L
 
 private const val HEAD_WAIT_MS = 1000L
 private const val POLL_MS = 50L
@@ -264,7 +267,7 @@ private class IntroScene {
         val g = progress(t, T_GEM_START, T_GEM_END)
         gem.scale(if (g < 0.7f) 1.15f * (g / 0.7f).ease() else 1.15f - 0.15f * ((g - 0.7f) / 0.3f))
         sparkles.forEachIndexed { i, s ->
-            val p = progress(t, T_GEM_START + 150L * i, T_GEM_START + 150L * i + 700L)
+            val p = progress(t, T_GEM_START + SPARKLE_STEP_MS * i, T_GEM_START + SPARKLE_STEP_MS * i + SPARKLE_MS)
             s.scale(sin(p * PI).toFloat())
         }
         name.opacity(progress(t, T_NAME_START, T_NAME_END).ease())

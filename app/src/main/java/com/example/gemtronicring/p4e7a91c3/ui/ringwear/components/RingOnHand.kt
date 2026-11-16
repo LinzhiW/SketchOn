@@ -77,14 +77,22 @@ private fun segmentMiddle(hand: HandPose, finger: WornFinger): Vector3 {
     return Vector3((a.x + b.x) / 2f, (a.y + b.y) / 2f, (a.z + b.z) / 2f)
 }
 
+/**
+ * The hand only if the headset is really tracking it. A hand it is not tracking can still come
+ * as a pose with every joint at (0, 0, 0) (seen on a headset); that is no hand.
+ */
+internal fun HandPose?.tracked(): HandPose? = this?.takeIf { it[HandJoint.Index.WRIST].position != Vector3.ZERO }
+
 /** Keeps the ring on the hand that was raised first, until that hand goes away. */
 private class RaisedHand {
     private var usingRight = true
 
     fun pick(data: HandTrackingData): HandPose? {
-        if (usingRight && data.right == null && data.left != null) usingRight = false
-        if (!usingRight && data.left == null && data.right != null) usingRight = true
-        return if (usingRight) data.right else data.left
+        val right = data.right.tracked()
+        val left = data.left.tracked()
+        if (usingRight && right == null && left != null) usingRight = false
+        if (!usingRight && left == null && right != null) usingRight = true
+        return if (usingRight) right else left
     }
 }
 
@@ -292,16 +300,23 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
         try { while (true) {
             val d = currentData
             var gap = Float.NaN
-            val pads = runCatching { controllers.latestData }.getOrNull()
+            // Controllers put down keep reporting where they lie, so a tracked hand decides:
+            // the headset only tracks hands once the controllers are set aside.
+            val hands = listOfNotNull(d.right.tracked(), d.left.tracked())
+            val pads = if (hands.isEmpty()) runCatching { controllers.latestData }.getOrNull() else null
             val left = pads?.left
             val right = pads?.right
             val pressed = buttons.latest?.right
+            val mode = if (left != null || right != null) "controller" else "fingertip"
             if (left != null || right != null) {
                 if (!sawControllers) {
                     sawControllers = true
                     currentOnEvent(RingWearEvent.ControllersSeen(true))
                 }
-                kit.show(left, right, brushColor, erasing, brushSize)
+                // Where the controller points on the ring: the system's own ray passes through
+                // the ring (it only stops at panels), so the brush finds the spot itself.
+                val aimAt = right?.let { ring.rayHit(it.position, kit.forwardOf(it)) }
+                kit.show(left, right, brushColor, erasing, brushSize, aimAt)
                 when (val swatch = kit.touched(right)) {
                     is Swatch.Colour -> {
                         erasing = false
@@ -312,7 +327,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                     null -> Unit
                 }
                 if (right != null && (pressed?.triggerValue ?: 0f) > TRIGGER_ON) {
-                    if (ring.brushAt(kit.tipOf(right), ControllerBrush.SIZES_M[brushSize], brushColor, erasing)) {
+                    if (ring.brushAt(aimAt ?: kit.tipOf(right), ControllerBrush.SIZES_M[brushSize], brushColor, erasing)) {
                         dirty = true
                         painted++
                     }
@@ -334,7 +349,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                 }
             } else {
                 kit.hide()
-                listOfNotNull(d.right, d.left).forEach { pose ->
+                hands.forEach { pose ->
                     val tip = pose[HandJoint.Index.INDEX_TIP].position
                     if (ring.brushAt(tip, BRUSH_RADIUS_M, brushColor)) {
                         dirty = true
@@ -353,7 +368,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             if (now - lastLog >= BRUSH_LOG_MS) {
                 Log.i(
                     TAG,
-                    "brush: ${if (sawControllers) "controller" else "fingertip"} ${"%.3f".format(gap)} m from the ring, " +
+                    "brush: $mode ${"%.3f".format(gap)} m from the ring, " +
                         "$painted dabs, $shown uploads, trigger=${pressed?.triggerValue}, grip=${pressed?.gripValue}",
                 )
                 lastLog = now
@@ -527,7 +542,7 @@ private fun holdForPainting(
  */
 private fun placeByHand(panelsRoot: Entity, stageRoot: Entity, data: HandTrackingData, waitedMs: Long): Quat? {
     val aim = data.rightAim?.takeIf { it.isReady } ?: data.leftAim?.takeIf { it.isReady }
-    val wrist = (data.right ?: data.left)?.get(HandJoint.Index.WRIST)?.position
+    val wrist = (data.right.tracked() ?: data.left.tracked())?.get(HandJoint.Index.WRIST)?.position
     val hand = aim?.aimPose?.position ?: wrist ?: return null
     // Which way the user faces: where the aim ray points, flattened. Without one, stage forward.
     var fx = 0f
@@ -544,8 +559,8 @@ private fun placeByHand(panelsRoot: Entity, stageRoot: Entity, data: HandTrackin
 
 /** Both hands held up and pinched: panels go in front of the point between them. */
 private fun placeByBothHands(panelsRoot: Entity, stageRoot: Entity, data: HandTrackingData): Quat? {
-    val l = data.left?.get(HandJoint.Index.WRIST)?.position ?: return null
-    val r = data.right?.get(HandJoint.Index.WRIST)?.position ?: return null
+    val l = data.left.tracked()?.get(HandJoint.Index.WRIST)?.position ?: return null
+    val r = data.right.tracked()?.get(HandJoint.Index.WRIST)?.position ?: return null
     val mid = Vector3((l.x + r.x) / 2f, (l.y + r.y) / 2f, (l.z + r.z) / 2f)
     // Facing is square to the line between the wrists; of its two senses, the one the aim rays
     // agree with (or stage forward without them).

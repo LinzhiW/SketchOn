@@ -69,6 +69,19 @@ internal class GeneratedRingRig private constructor(
         private set
 
     /**
+     * Where a ray from [origin] along [direction] (stage container space, like [brushAt])
+     * first meets the ring, or null. The model's space is the container's moved, turned and
+     * scaled, so a point a fraction along the ray there is the same fraction along it here.
+     */
+    fun rayHit(origin: Vector3, direction: Vector3): Vector3? {
+        val p = painter ?: return null
+        val o = model.convertPositionFrom(origin, null)
+        val e = model.convertPositionFrom(Vector3(origin.x + direction.x, origin.y + direction.y, origin.z + direction.z), null)
+        val t = p.raycast(o.x, o.y, o.z, e.x - o.x, e.y - o.y, e.z - o.z) ?: return null
+        return Vector3(origin.x + direction.x * t, origin.y + direction.y * t, origin.z + direction.z * t)
+    }
+
+    /**
      * Paints around [point] out to [radiusM] metres. The point is in the stage container's own
      * space, where hand joints are reported (not the stage root's: the first try read it there
      * and never touched the ring). Returns true if the ring's look changed; call [showBrush] to

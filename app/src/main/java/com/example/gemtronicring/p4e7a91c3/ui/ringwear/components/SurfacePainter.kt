@@ -97,6 +97,33 @@ internal class SurfacePainter(private val surface: RingSurface) {
         return changed
     }
 
+    /**
+     * Where the ray from ([ox], [oy], [oz]) along ([dx], [dy], [dz]) first meets the surface,
+     * as the multiple of the direction travelled; null if it misses. Both sides of a triangle
+     * count, so the inside of the band can be painted through the hole.
+     */
+    fun raycast(ox: Float, oy: Float, oz: Float, dx: Float, dy: Float, dz: Float): Float? {
+        val p = surface.positions
+        val ix = surface.indices
+        val dd = dx * dx + dy * dy + dz * dz
+        if (dd == 0f) return null
+        var best = Float.MAX_VALUE
+        for (t in 0 until triangles) {
+            // Skip a triangle whose bounding sphere the ray passes by.
+            val cx = centres[t * 3] - ox
+            val cy = centres[t * 3 + 1] - oy
+            val cz = centres[t * 3 + 2] - oz
+            val along = (cx * dx + cy * dy + cz * dz) / dd
+            val px = cx - along * dx
+            val py = cy - along * dy
+            val pz = cz - along * dz
+            if (px * px + py * py + pz * pz > reach[t] * reach[t]) continue
+            val hit = rayTriangle(ox, oy, oz, dx, dy, dz, p, ix[t * 3], ix[t * 3 + 1], ix[t * 3 + 2]) ?: continue
+            if (hit < best) best = hit
+        }
+        return if (best == Float.MAX_VALUE) null else best
+    }
+
     /** Distance from a point to the nearest corner of the surface, in the model's units. */
     fun nearest(x: Float, y: Float, z: Float): Float {
         val p = surface.positions
@@ -117,6 +144,7 @@ internal class SurfacePainter(private val surface: RingSurface) {
 
     private fun dist(x: Float, y: Float, z: Float) = sqrt(x * x + y * y + z * z)
 
+
     private fun mix(from: Int, to: Int, t: Float): Int {
         fun ch(shift: Int) = (((from shr shift) and 0xFF) * (1f - t) + ((to shr shift) and 0xFF) * t).toInt()
         return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
@@ -126,4 +154,35 @@ internal class SurfacePainter(private val surface: RingSurface) {
         const val SEAM_PX = 1.5f
         const val SOFT_EDGE = 0.35f
     }
+}
+
+/** Moller-Trumbore: the ray's parameter where it crosses triangle a-b-c, or null. */
+internal fun rayTriangle(
+    ox: Float, oy: Float, oz: Float, dx: Float, dy: Float, dz: Float,
+    p: FloatArray, a: Int, b: Int, c: Int,
+): Float? {
+    val e1x = p[b * 3] - p[a * 3]
+    val e1y = p[b * 3 + 1] - p[a * 3 + 1]
+    val e1z = p[b * 3 + 2] - p[a * 3 + 2]
+    val e2x = p[c * 3] - p[a * 3]
+    val e2y = p[c * 3 + 1] - p[a * 3 + 1]
+    val e2z = p[c * 3 + 2] - p[a * 3 + 2]
+    val hx = dy * e2z - dz * e2y
+    val hy = dz * e2x - dx * e2z
+    val hz = dx * e2y - dy * e2x
+    val det = e1x * hx + e1y * hy + e1z * hz
+    if (kotlin.math.abs(det) < 1e-12f) return null
+    val inv = 1f / det
+    val sx = ox - p[a * 3]
+    val sy = oy - p[a * 3 + 1]
+    val sz = oz - p[a * 3 + 2]
+    val u = (sx * hx + sy * hy + sz * hz) * inv
+    if (u < 0f || u > 1f) return null
+    val qx = sy * e1z - sz * e1y
+    val qy = sz * e1x - sx * e1z
+    val qz = sx * e1y - sy * e1x
+    val v = (dx * qx + dy * qy + dz * qz) * inv
+    if (v < 0f || u + v > 1f) return null
+    val t = (e2x * qx + e2y * qy + e2z * qz) * inv
+    return if (t > 0f) t else null
 }
