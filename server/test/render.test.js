@@ -45,7 +45,7 @@ test("combines material, style and view in the prompt", () => {
   const { prompt } = buildInput({ sketch: SKETCH, material: "clay", style: "cute", view: "top" });
   assert.match(prompt, /white matte polymer clay/);
   assert.match(prompt, /cartoon/);
-  assert.match(prompt, /looking down at the top/);
+  assert.match(prompt, /from above at a slant/);
 });
 
 test("rejects an unknown engine and a bad seed", () => {

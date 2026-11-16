@@ -38,3 +38,11 @@ test("metal prompts add a stone only when drawn, and no view names one", () => {
     assert.doesNotMatch(prompt, /\bstone on top\b|defines the stone|stone sits/);
   }
 });
+
+test("top and side views are seen at a slant, so the ring's opening shows", () => {
+  for (const view of ["top", "side"]) {
+    const { prompt } = buildInput({ sketch: SKETCH, material: "gold", view });
+    assert.match(prompt, /at a slant/);
+    assert.match(prompt, /opening shows/);
+  }
+});

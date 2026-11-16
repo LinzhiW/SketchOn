@@ -923,6 +923,7 @@ private fun darkButtonColors() =
 
 /**
  * A plain ring band to draw on, as it looks from each view, in 0..1 drawing coordinates.
+ * The server's prompt (render.js, VIEWS) describes the same three angles: change them together.
  * It is drawn light grey and sent with the drawing, so the AI has a band even when the user
  * only draws the stone; the prompt tells it the grey lines are only a guide.
  */
@@ -932,17 +933,36 @@ private fun guideShapes(view: SketchView): List<List<StrokePoint>> {
             val a = 2.0 * Math.PI * k / 72
             StrokePoint((cx + rx * Math.cos(a)).toFloat(), (cy + ry * Math.sin(a)).toFloat())
         }
-    fun box(x0: Float, y0: Float, x1: Float, y1: Float) =
-        listOf(StrokePoint(x0, y0), StrokePoint(x1, y0), StrokePoint(x1, y1), StrokePoint(x0, y1), StrokePoint(x0, y0))
-    // Matches a real ring's band seen from each side (Design 1, posed). No stone marker: the
-    // AI drew a marker circle as a real ball on the ring.
+    /** Part of an ellipse, from angle [from] to [to] in degrees (0 = right, 90 = down). */
+    fun arc(cx: Float, cy: Float, rx: Float, ry: Float, from: Int, to: Int) =
+        (0..36).map { k ->
+            val a = Math.toRadians(from + (to - from) * k / 36.0)
+            StrokePoint((cx + rx * Math.cos(a)).toFloat(), (cy + ry * Math.sin(a)).toFloat())
+        }
+    /** A straight line in short steps: the lines are smoothed, which would round a long one. */
+    fun line(x0: Float, y0: Float, x1: Float, y1: Float) =
+        (0..8).map { k -> StrokePoint(x0 + (x1 - x0) * k / 8f, y0 + (y1 - y0) * k / 8f) }
+    // No stone marker: the AI drew a marker circle as a real ball on the ring.
     return when (view) {
         // Through the hole: the band is two circles.
         SketchView.RingShape -> listOf(ellipse(0.5f, 0.6f, 0.3f, 0.3f), ellipse(0.5f, 0.6f, 0.23f, 0.23f))
-        // Looking down at the top: the band crosses as a wide strip.
-        SketchView.FromAbove -> listOf(box(0.2f, 0.45f, 0.8f, 0.55f))
-        // From the side: the band is a tall narrow strip.
-        SketchView.Profile -> listOf(box(0.46f, 0.3f, 0.54f, 0.9f))
+        // Top and side are seen at a slant, so the hole shows. Seen square on, the band is a
+        // plain strip: nobody read it as a ring, the AI did not either, and the 3D model made
+        // from that picture had no hole to go by.
+        // From above, at a slant: the rim is a flat oval, with the band's wall below it.
+        SketchView.FromAbove ->
+            listOf(
+                ellipse(0.5f, 0.51f, 0.3f, 0.11f),
+                ellipse(0.5f, 0.51f, 0.245f, 0.072f),
+                line(0.2f, 0.51f, 0.2f, 0.61f) + arc(0.5f, 0.61f, 0.3f, 0.11f, 180, 0) + line(0.8f, 0.61f, 0.8f, 0.51f),
+            )
+        // From the side, at a slant: the rim is a narrow upright oval, with the band's wall beside it.
+        SketchView.Profile ->
+            listOf(
+                ellipse(0.55f, 0.6f, 0.11f, 0.3f),
+                ellipse(0.55f, 0.6f, 0.072f, 0.245f),
+                line(0.55f, 0.3f, 0.45f, 0.3f) + arc(0.45f, 0.6f, 0.11f, 0.3f, 270, 90) + line(0.45f, 0.9f, 0.55f, 0.9f),
+            )
     }
 }
 

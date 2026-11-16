@@ -40,12 +40,14 @@ export const STYLES = {
 
 // "front" looks through the ring's hole (also what a ring lying flat looks like from above);
 // "top" looks down at the top of the ring, as on a hand; "side" shows the band's profile.
+// Top and side are seen at a slant, like the app's grey guide: square on, the band is a plain
+// strip with no hole, and the render (and the 3D model made from it) was not a ring.
 // No view mentions a stone: naming one made metal rings come back with a diamond every time.
 export const VIEWS = {
   front:
     "upright, seen looking straight through the ring's hole; the drawing defines the band's outline and anything on top of it",
-  top: "seen from above, looking down at the top of the ring; the drawing defines what sits on top of the band",
-  side: "seen from the side; the drawing defines the band's thickness and how high anything on top sits",
+  top: "seen from above at a slant, looking down onto the top of the ring so its round opening shows as a flat oval; the drawing defines what sits on top of the band",
+  side: "seen from the side at a slant, so the round opening shows as a narrow upright oval; the drawing defines the band's thickness and how high anything on top sits",
 };
 
 /** Metal rings got a diamond whether drawn or not. A stone only comes from the drawing. */
@@ -69,7 +71,7 @@ function promptFor({ material, style, view, rule }) {
     `Turn this line sketch into a photorealistic product render of a single finger ring made of ${material}, ` +
     `${style}, ${view}. ` +
     rule +
-    "Keep exactly the drawn shape, proportions and viewpoint. Faint grey lines are only a guide for the band, not part of the design. " +
+    "Keep exactly the drawn shape, proportions and viewpoint. Faint grey lines are only a guide for a plain band at this viewing angle, not part of the design. " +
     "Studio lighting, plain light grey background."
   );
 }
