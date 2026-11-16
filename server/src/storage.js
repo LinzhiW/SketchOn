@@ -7,7 +7,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
-const SAFE_KEY = /^[A-Za-z0-9-]{8,80}\.(glb|jpg)$/;
+// Models (.glb), pictures (.jpg) and painted textures of colourways (.png).
+const SAFE_KEY = /^[A-Za-z0-9-]{8,80}\.(glb|jpg|png)$/;
 
 function checkKey(key) {
   if (!SAFE_KEY.test(key)) throw new Error(`bad storage key ${key}`);

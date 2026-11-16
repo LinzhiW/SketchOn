@@ -11,6 +11,7 @@
 
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { RenderError } from "./render.js";
+import { PIECE_COLUMNS, SOCIAL_SCHEMA, createSocial } from "./social.js";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]{1,19}$/;
 const MIN_PASSWORD = 6;
@@ -75,6 +76,11 @@ async function sqliteAdapter(path) {
       if (sql.startsWith("CREATE TABLE IF NOT EXISTS pieces")) migrate();
       db.exec(dialect(sql));
     },
+    /** Adds a column unless the table has it (SQLite has no ADD COLUMN IF NOT EXISTS). */
+    async addColumn(table, name, definition) {
+      const columns = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+      if (!columns.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+    },
     async close() {
       db.close();
     },
@@ -102,6 +108,9 @@ async function postgresAdapter(url) {
     async exec(sql) {
       await pool.query(sql);
     },
+    async addColumn(table, name, definition) {
+      await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${name} ${definition}`);
+    },
     async close() {
       await pool.end();
     },
@@ -115,6 +124,8 @@ async function postgresAdapter(url) {
 export async function openDb(url = ":memory:", { now = () => Date.now() } = {}) {
   const sql = /^postgres(ql)?:\/\//.test(url) ? await postgresAdapter(url) : await sqliteAdapter(url);
   for (const statement of SCHEMA) await sql.exec(statement);
+  for (const [name, definition] of PIECE_COLUMNS) await sql.addColumn("pieces", name, definition);
+  for (const statement of SOCIAL_SCHEMA) await sql.exec(statement);
   const one = async (query, params) => (await sql.all(query, params))[0] ?? null;
 
   function checkCredentials(name, password) {
@@ -211,9 +222,9 @@ export async function openDb(url = ":memory:", { now = () => Date.now() } = {}) 
     return tidy(await one(`SELECT ${columns} FROM pieces WHERE id = ?`, [id]));
   }
 
-  /** Finished pieces, newest first. */
+  /** Finished pieces, newest first. A ring its author deleted is no longer in the gallery. */
   async function pieces() {
-    return (await sql.all(`SELECT ${columns} FROM pieces WHERE ready = 1 ORDER BY created_at DESC`)).map(tidy);
+    return (await sql.all(`SELECT ${columns} FROM pieces WHERE ready = 1 AND deleted = 0 ORDER BY created_at DESC`)).map(tidy);
   }
 
   /** Imports a finished piece made before accounts, unless it is already known. */
@@ -237,6 +248,7 @@ export async function openDb(url = ":memory:", { now = () => Date.now() } = {}) 
     piece,
     pieces,
     importLegacy,
+    ...createSocial({ sql, one, now }),
     close: () => sql.close(),
   };
 }

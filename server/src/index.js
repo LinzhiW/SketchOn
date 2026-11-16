@@ -13,6 +13,18 @@
 //   GET  /api/jobs/ID -> 200 { "status": "running" | "done" | "failed", "modelUrl"?, "error"? }
 //   GET  /models/ID.glb  a finished model;  GET /models/ID.jpg  the render it was made from
 //   GET  /api/library -> 200 { "pieces": [{ "id", "name"|null, "author"|null, "material"|null, "modelUrl", "pictureUrl"|null, "createdAt" }] }
+//
+//   Colourways, likes, saves, wears and notifications (docs/colourways-plan.md):
+//   GET  /api/pieces/ID              one ring's page: counts, the author's colourways, everyone else's
+//   POST /api/pieces/ID/colourways [login] { "paints": { "0": argb }, "texture"?: PNG data URI,
+//                                     "picture"?: JPEG data URI } -> { "id" }
+//   POST /api/pieces/ID/cover [login] { "colourwayId": "..." | null };  DELETE /api/pieces/ID [login]
+//   DELETE /api/colourways/ID [login];  POST /api/colourways/ID/feature|hide [login] { "on": true }
+//   POST /api/likes [login] { "kind": "piece" | "colourway", "id", "on" }
+//   POST /api/saves [login] { "pieceId", "on" };  POST /api/wears [login] { "pieceId", "colourwayId"|null }
+//   GET  /api/me/library [login];  GET /api/notifications [login];  POST /api/notifications/seen [login]
+//   GET  /colourways/ID.png  a painted texture;  GET /colourways/ID.jpg  a colourway's picture
+//
 //   GET  /            the sketch test page (public/sketch.html);  GET /health  for the host
 //
 // Where things are kept is set by the environment:
@@ -28,6 +40,7 @@ import { fal } from "@fal-ai/client";
 import { render, RenderError } from "./render.js";
 import { createTo3d, isJobId } from "./to3d.js";
 import { openDb } from "./db.js";
+import { isColourwayId } from "./social.js";
 import { localStorage, supabaseStorage } from "./storage.js";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -82,16 +95,42 @@ if (!cloud) {
 
 const fileUrl = (id, ext) => files.publicUrl(`${id}.${ext}`) ?? `/models/${id}.${ext}`;
 
-/** Every finished piece, newest first, with its maker. */
+const colourwayUrl = (id, ext) => files.publicUrl(`${id}.${ext}`) ?? `/colourways/${id}.${ext}`;
+
+/** Where the headset fetches a colourway's texture and picture, when it has them. */
+const withUrls = (c) => ({
+  ...c,
+  textureUrl: c.hasTexture ? colourwayUrl(c.id, "png") : null,
+  pictureUrl: c.hasPicture ? colourwayUrl(c.id, "jpg") : null,
+});
+
+/** Every finished piece, newest first, with its maker, likes, saves and cover colourway. */
 async function library() {
-  return (await db.pieces())
-    .filter((p) => isJobId(p.id))
-    .map((p) => ({
-      ...p,
-      modelUrl: fileUrl(p.id, "glb"),
-      // In the cloud every piece made by the app has its picture; on a computer, check.
-      pictureUrl: cloud || existsSync(picturePath(p.id)) ? fileUrl(p.id, "jpg") : null,
-    }));
+  const pieces = (await db.pieces()).filter((p) => isJobId(p.id));
+  const extras = await db.galleryExtras(pieces.map((p) => p.id));
+  return pieces.map((p) => ({
+    ...p,
+    modelUrl: fileUrl(p.id, "glb"),
+    // In the cloud every piece made by the app has its picture; on a computer, check.
+    pictureUrl: cloud || existsSync(picturePath(p.id)) ? fileUrl(p.id, "jpg") : null,
+    likes: extras[p.id].likes,
+    saves: extras[p.id].saves,
+    cover: extras[p.id].cover ? withUrls(extras[p.id].cover) : null,
+  }));
+}
+
+/** The bytes of a data URI of one of [types], or null when there is none. */
+function dataUriBytes(uri, types) {
+  if (uri === undefined || uri === null) return null;
+  const match = typeof uri === "string" && uri.match(/^data:image\/([a-z]+);base64,(.+)$/);
+  if (!match || !types.includes(match[1])) throw new RenderError(400, `expected a ${types.join(" or ")} data URI`);
+  return Buffer.from(match[2], "base64");
+}
+
+/** The signed-in user, or null: for pages anyone may see that show more when signed in. */
+async function viewerOf(req) {
+  const header = req.headers.authorization ?? "";
+  return header.startsWith("Bearer ") ? db.userForToken(header.slice(7)) : null;
 }
 
 /** The signed-in user, or a 401. */
@@ -201,6 +240,16 @@ async function route(req, res) {
     }
   }
   if (req.method === "GET" && url === "/api/library") return send(res, 200, { pieces: await library() });
+  const social = await socialRoute(req, url);
+  if (social !== undefined) return send(res, 200, social);
+  const colourFile = url.match(/^\/colourways\/([^/]+)\.(png|jpg)$/);
+  if (req.method === "GET" && colourFile && isColourwayId(colourFile[1])) {
+    const bytes = await files.get(`${colourFile[1]}.${colourFile[2]}`);
+    if (bytes) {
+      res.writeHead(200, { "Content-Type": colourFile[2] === "png" ? "image/png" : "image/jpeg" });
+      return res.end(bytes);
+    }
+  }
   const file = url.match(/^\/models\/([^/]+)\.(glb|jpg)$/);
   if (req.method === "GET" && file && isJobId(file[1])) {
     const bytes = await files.get(`${file[1]}.${file[2]}`);
@@ -210,6 +259,102 @@ async function route(req, res) {
     }
   }
   send(res, 404, { error: "not found" });
+}
+
+/** The colourway, like, save, wear and notification routes; undefined when none matches. */
+async function socialRoute(req, url) {
+  const ringPage = url.match(/^\/api\/pieces\/([^/]+)$/);
+  if (req.method === "GET" && ringPage) {
+    const page = await db.pieceDetail(ringPage[1], await viewerOf(req));
+    return {
+      ...page,
+      piece: { ...page.piece, modelUrl: fileUrl(page.piece.id, "glb"), pictureUrl: fileUrl(page.piece.id, "jpg") },
+      authorColourways: page.authorColourways.map(withUrls),
+      otherColourways: page.otherColourways.map(withUrls),
+    };
+  }
+  if (req.method === "DELETE" && ringPage) {
+    const { user } = await userOf(req);
+    await db.deletePiece(ringPage[1], user);
+    console.log(`ring ${ringPage[1]} deleted by ${user.name}`);
+    return { ok: true };
+  }
+  const colouring = url.match(/^\/api\/pieces\/([^/]+)\/colourways$/);
+  if (req.method === "POST" && colouring) {
+    const { user } = await userOf(req);
+    const { paints, texture, picture } = await readJson(req);
+    const textureBytes = dataUriBytes(texture, ["png"]);
+    const pictureBytes = dataUriBytes(picture, ["jpeg", "jpg"]);
+    // The files go up first, under the id the row will get, so a saved row never points at
+    // a file that is not there.
+    const id = db.newColourwayId();
+    if (textureBytes) await files.put(`${id}.png`, textureBytes, "image/png");
+    if (pictureBytes) await files.put(`${id}.jpg`, pictureBytes, "image/jpeg");
+    await db.saveColourway({
+      id,
+      pieceId: colouring[1],
+      user,
+      paints,
+      hasTexture: Boolean(textureBytes),
+      hasPicture: Boolean(pictureBytes),
+    });
+    console.log(`colourway ${id} on ${colouring[1]} by ${user.name}`);
+    return { id };
+  }
+  const cover = url.match(/^\/api\/pieces\/([^/]+)\/cover$/);
+  if (req.method === "POST" && cover) {
+    const { user } = await userOf(req);
+    const { colourwayId } = await readJson(req);
+    await db.setCover(cover[1], colourwayId ?? null, user);
+    return { ok: true };
+  }
+  const colourway = url.match(/^\/api\/colourways\/([^/]+)$/);
+  if (req.method === "DELETE" && colourway) {
+    const { user } = await userOf(req);
+    await db.deleteColourway(colourway[1], user);
+    return { ok: true };
+  }
+  const choice = url.match(/^\/api\/colourways\/([^/]+)\/(feature|hide)$/);
+  if (req.method === "POST" && choice) {
+    const { user } = await userOf(req);
+    const { on } = await readJson(req);
+    if (choice[2] === "feature") await db.featureColourway(choice[1], user, on === true);
+    else await db.hideColourway(choice[1], user, on === true);
+    return { ok: true };
+  }
+  if (req.method === "POST" && url === "/api/likes") {
+    const { user } = await userOf(req);
+    const { kind, id, on } = await readJson(req);
+    await db.like(user, kind, id, on === true);
+    return { ok: true };
+  }
+  if (req.method === "POST" && url === "/api/saves") {
+    const { user } = await userOf(req);
+    const { pieceId, on } = await readJson(req);
+    await db.save(user, pieceId, on === true);
+    return { ok: true };
+  }
+  if (req.method === "POST" && url === "/api/wears") {
+    const { user } = await userOf(req);
+    const { pieceId, colourwayId } = await readJson(req);
+    await db.wear(user, pieceId, colourwayId ?? null);
+    return { ok: true };
+  }
+  if (req.method === "GET" && url === "/api/me/library") {
+    const { user } = await userOf(req);
+    const mine = await db.mine(user);
+    return { ...mine, colourways: mine.colourways.map(withUrls) };
+  }
+  if (req.method === "GET" && url === "/api/notifications") {
+    const { user } = await userOf(req);
+    return { notifications: await db.notifications(user) };
+  }
+  if (req.method === "POST" && url === "/api/notifications/seen") {
+    const { user } = await userOf(req);
+    await db.markNotificationsSeen(user);
+    return { ok: true };
+  }
+  return undefined;
 }
 
 createServer(async (req, res) => {
