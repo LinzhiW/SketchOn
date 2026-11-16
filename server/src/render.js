@@ -39,13 +39,18 @@ export const STYLES = {
 };
 
 // "front" looks through the ring's hole (also what a ring lying flat looks like from above);
-// "top" looks down at the stone, as on a hand; "side" shows the band's profile.
+// "top" looks down at the top of the ring, as on a hand; "side" shows the band's profile.
+// No view mentions a stone: naming one made metal rings come back with a diamond every time.
 export const VIEWS = {
   front:
-    "upright, seen looking straight through the ring's hole; the drawing defines the band's outline, with any stone on top",
-  top: "seen from above, looking down at the top of the ring; the drawing defines the stone and what sits on top of the band",
-  side: "seen from the side; the drawing defines the band's thickness and how high the stone sits",
+    "upright, seen looking straight through the ring's hole; the drawing defines the band's outline and anything on top of it",
+  top: "seen from above, looking down at the top of the ring; the drawing defines what sits on top of the band",
+  side: "seen from the side; the drawing defines the band's thickness and how high anything on top sits",
 };
+
+/** Metal rings got a diamond whether drawn or not. A stone only comes from the drawing. */
+const METAL_RULE =
+  "Add a gemstone or diamond only where the drawing clearly shows one; otherwise the ring is plain metal with no stones. ";
 
 const MAX_SKETCH_BYTES = 2 * 1024 * 1024;
 const SKETCH_PREFIX = /^data:image\/(png|jpeg|webp);base64,/;
@@ -111,7 +116,7 @@ export function buildInput({ sketch, material, style, view, engine = "klein", se
   }
   const words = {
     material: pick(MATERIALS, material, "material", "gold"),
-    rule: NOT_METAL.has(material) ? `${NOT_METAL_RULE} ` : "",
+    rule: NOT_METAL.has(material) ? `${NOT_METAL_RULE} ` : METAL_RULE,
     style: pick(STYLES, style, "style", "refined"),
     view: pick(VIEWS, view, "view", "front"),
   };

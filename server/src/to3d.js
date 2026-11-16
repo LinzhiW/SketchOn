@@ -17,14 +17,16 @@ const JOB_ID = /^[A-Za-z0-9-]{8,80}$/;
 const MAX_NAME = 40;
 const MATERIAL_ID = /^[a-z]{1,20}$/;
 
-export function tripoInput(imageUrl) {
-  return {
-    image_url: imageUrl,
-    texture: "standard",
-    pbr: true,
-    orientation: "align_image",
-    face_limit: 30000,
-  };
+/**
+ * Clay and resin are made white and painted in the app with a brush, which paints into the
+ * model's texture, so they need one. They only need its colour, not PBR's extra maps.
+ */
+const PAINTABLE = new Set(["clay", "resin"]);
+
+export function tripoInput(imageUrl, material) {
+  const base = { image_url: imageUrl, orientation: "align_image", face_limit: 30000 };
+  if (PAINTABLE.has(material)) return { ...base, texture: "standard", pbr: false };
+  return { ...base, texture: "standard", pbr: true };
 }
 
 export function isJobId(id) {
@@ -52,10 +54,10 @@ export function createTo3d({ fal, store, download, pose: pose_, log = () => {} }
     } else if (!/^https:\/\//.test(image)) {
       throw new RenderError(400, "image must be a data URI or an https URL");
     }
-    const { request_id: jobId } = await fal.queue.submit(TRIPO_MODEL, { input: tripoInput(url) });
+    const made = typeof material === "string" && MATERIAL_ID.test(material) ? material : null;
+    const { request_id: jobId } = await fal.queue.submit(TRIPO_MODEL, { input: tripoInput(url, made) });
     // The render becomes the piece's picture in the gallery.
     if (picture) await store.savePicture?.(jobId, picture);
-    const made = typeof material === "string" && MATERIAL_ID.test(material) ? material : null;
     await store.saveInfo?.(jobId, { name: title || null, material: made, createdAt: Date.now(), user });
     return { jobId };
   }

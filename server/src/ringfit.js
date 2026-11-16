@@ -211,6 +211,25 @@ export function quaternionFromRows(r) {
   return [x / n, y / n, z / n, w / n];
 }
 
+/**
+ * A model made without texture (clay and resin, which the user colours) may come with no
+ * material at all. The app colours a ring through its materials, so each part gets a plain
+ * white one.
+ */
+export function giveMaterial(json) {
+  json.materials ??= [];
+  for (const mesh of json.meshes ?? []) {
+    for (const prim of mesh.primitives ?? []) {
+      if (prim.material !== undefined && json.materials[prim.material]) continue;
+      json.materials.push({
+        name: "white",
+        pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.7 },
+      });
+      prim.material = json.materials.length - 1;
+    }
+  }
+}
+
 /** Rewrites a Tripo GLB into the standard ring pose. Returns the new file and what was found. */
 export function poseRing(buffer) {
   const glb = readGlb(buffer);
@@ -225,6 +244,7 @@ export function poseRing(buffer) {
   node.translation = pose.translation;
   node.rotation = pose.rotation;
   node.scale = pose.scale;
+  giveMaterial(glb.json);
   const { rest, parts } = splitParts(glb, pose.matrix);
   return { glb: writeGlb(glb.json, rest), pose: { ...pose, parts } };
 }
