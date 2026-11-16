@@ -6,7 +6,11 @@ import com.pico.spatial.core.ecs.TransformComponent
 import com.pico.spatial.core.ecs.resource.MeshResource
 import com.pico.spatial.core.ecs.resource.UnlitMaterial
 import com.pico.spatial.core.math.Color4
+import com.pico.spatial.core.math.Quat
 import com.pico.spatial.core.math.Vector3
+import kotlin.math.PI
+import kotlin.math.acos
+import kotlin.math.sqrt
 import com.pico.spatial.tracking.controller.ControllerPose
 
 /**
@@ -47,12 +51,55 @@ internal class ControllerBrush(private val stageRoot: Entity) {
         tipMaterial.setBaseColor(colour(if (erasing) ERASER_GREY else argb))
     }
 
+    /** A thin pen held in the pinching hand, shown along the hand's aim. */
+    private val penMaterial = UnlitMaterial.create()
+    private val pen = Entity().apply {
+        enabled = false
+        components.set(ModelComponent(MeshResource.createCylinder(PEN_LENGTH_M, PEN_RADIUS_M), penMaterial))
+        stageRoot.addChild(this)
+    }
+
+    /**
+     * The hand's pen: a stick from [from] along [dir] (container space), and the dot at [hit]
+     * on the ring, or at the pen's tip when it points past the ring.
+     */
+    fun showPen(from: Vector3, dir: Vector3, hit: Vector3?, argb: Int, erasing: Boolean, radiusM: Float) {
+        val len = sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z)
+        if (len == 0f) return hide()
+        val d = Vector3(dir.x / len, dir.y / len, dir.z / len)
+        val mid = Vector3(from.x + d.x * PEN_LENGTH_M / 2f, from.y + d.y * PEN_LENGTH_M / 2f, from.z + d.z * PEN_LENGTH_M / 2f)
+        pen.enabled = true
+        pen.components[TransformComponent::class.java]?.apply {
+            setPosition(stageRoot.convertPositionFrom(mid, null))
+            setQuaternion(stageRoot.convertRotationFrom(alongY(d), null))
+        }
+        penMaterial.setBaseColor(colour(if (erasing) ERASER_GREY else argb))
+        val end = hit ?: Vector3(from.x + d.x * PEN_LENGTH_M, from.y + d.y * PEN_LENGTH_M, from.z + d.z * PEN_LENGTH_M)
+        tip.enabled = true
+        tip.components[TransformComponent::class.java]?.apply {
+            setPosition(stageRoot.convertPositionFrom(end, null))
+            setScaleVector(Vector3(radiusM, radiusM, radiusM))
+        }
+        tipMaterial.setBaseColor(colour(if (erasing) ERASER_GREY else argb))
+    }
+
     fun hide() {
         tip.enabled = false
+        pen.enabled = false
+    }
+
+    /** The turn that points a cylinder's length (its Y axis) along the unit vector [d]. */
+    private fun alongY(d: Vector3): Quat {
+        val axis = Vector3(d.z, 0f, -d.x) // (0, 1, 0) x d
+        val s = sqrt(axis.x * axis.x + axis.z * axis.z)
+        if (s < 1e-6f) return if (d.y >= 0f) Quat() else Quat(Vector3(1f, 0f, 0f), PI.toFloat())
+        return Quat(Vector3(axis.x / s, 0f, axis.z / s), acos(d.y.coerceIn(-1f, 1f)))
     }
 
     private companion object {
         const val TIP_AHEAD_M = 0.07f
+        const val PEN_LENGTH_M = 0.12f
+        const val PEN_RADIUS_M = 0.004f
         const val ERASER_GREY = 0xFF8A8F8C.toInt()
 
         fun colour(argb: Int) =

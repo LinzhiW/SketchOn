@@ -52,6 +52,7 @@ import com.pico.spatial.ui.foundation.gesture.detectSpatialDragGesture
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
+import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
@@ -313,8 +314,13 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
             val mode = if (left != null || right != null) "controller" else "fingertip"
             // The left hand turns the ring: grip held on the controller, or a pinch without one.
             // Moving it sideways turns the ring round, up or down tips it.
+            val leftPressed = buttons.latest?.left
+            // Grip or trigger: on a headset the grip alone never turned it (0 turn steps), so
+            // either one held turns the ring.
             val turnHand: Vector3? =
-                if (left != null) left.position.takeIf { (buttons.latest?.left?.gripValue ?: 0f) > GRIP_ON }
+                if (left != null) left.position.takeIf {
+                    (leftPressed?.gripValue ?: 0f) > GRIP_ON || (leftPressed?.triggerValue ?: 0f) > TRIGGER_ON
+                }
                 else d.left.tracked()?.takeIf { d.leftPinch?.let { p -> p.isReady && p.pinchValue > PINCH_ON } == true }
                     ?.get(HandJoint.Index.INDEX_TIP)?.position
             if (turnHand != null) {
@@ -362,8 +368,27 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                     grabbedAt = null
                 }
             } else {
-                kit.hide()
-                // The right index fingertip paints; the left hand is for turning.
+                // The right hand holds a pen while pinching, like a controller held in the hand:
+                // the pen points where the hand aims, a dot shows where that meets the ring, and
+                // the pinch paints there. (Touching the ring with a fingertip almost never
+                // reached it: the ring hangs in the air.) The left hand is for turning.
+                val aim = d.rightAim?.takeIf { it.isReady && d.right.tracked() != null }
+                val pinched = d.rightPinch?.let { it.isReady && it.pinchValue > PINCH_ON } == true
+                if (aim != null) {
+                    val from = aim.aimPose.position
+                    val dir = aim.aimPose.rotation.rotateVector(Vector3(0f, 0f, -1f))
+                    val hit = ring.rayHit(from, dir)
+                    kit.showPen(from, dir, hit, brushColor, erasing, brushRadiusM)
+                    if (pinched && hit != null) {
+                        if (ring.brushAt(hit, brushRadiusM, brushColor, erasing)) {
+                            dirty = true
+                            painted++
+                        }
+                        gap = ring.lastGapM
+                    }
+                } else {
+                    kit.hide()
+                }
                 d.right.tracked()?.let { pose ->
                     val tip = pose[HandJoint.Index.INDEX_TIP].position
                     if (ring.brushAt(tip, brushRadiusM, brushColor, erasing)) {
@@ -385,7 +410,9 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                     TAG,
                     "brush: $mode ${"%.3f".format(gap)} m from the ring, " +
                         "$painted dabs, $shown uploads, $turns turn steps, size ${"%.3f".format(brushRadiusM)} m, " +
-                        "trigger=${pressed?.triggerValue}, grip=${pressed?.gripValue}",
+                        "right trigger=${pressed?.triggerValue} grip=${pressed?.gripValue}, " +
+                        "left trigger=${leftPressed?.triggerValue} grip=${leftPressed?.gripValue}, " +
+                        "hand aim=${d.rightAim?.isReady} pinch=${d.rightPinch?.pinchValue}",
                 )
                 lastLog = now
             }
@@ -456,7 +483,7 @@ internal fun RingOnHand(state: RingWearUiState, onEvent: (RingWearEvent) -> Unit
                     // The rigs are built at 3x for the emulator; worn, the user sets the size.
                     val size = state.ringScale / RIG_SCALE
                     ring.root.components[TransformComponent::class.java]?.setScaleVector(Vector3(size, size, size))
-                    if (hand != null) wearOnFinger(ring.root, stageRoot, hand, state.finger)
+                    if (hand != null) wearOnFinger(ring.root, stageRoot, hand, state.finger, flip = ring is GeneratedRingRig)
                 }
             }
         },
@@ -645,13 +672,23 @@ private fun placeFrame(panelsRoot: Entity, stageRoot: Entity, hand: Vector3, fx:
 }
 
 /** Centres the ring on the finger segment; the joint's own axes line up with the ring's. */
-private fun wearOnFinger(ring: Entity, parent: Entity, hand: HandPose, finger: WornFinger) {
+/**
+ * Puts the ring on the finger. A generated ring has its top (where the drawing's decoration
+ * is) along +Y, which on the finger joint points to the palm: worn, the decoration sat under
+ * the finger. [flip] turns it half round the finger so the top faces the back of the hand.
+ */
+private fun wearOnFinger(ring: Entity, parent: Entity, hand: HandPose, finger: WornFinger, flip: Boolean = false) {
     val (base, _) = fingerSegment(finger)
+    val joint = hand[base].rotation
+    val turned = if (flip) joint * HALF_TURN_ROUND_FINGER else joint
     ring.components[TransformComponent::class.java]?.apply {
         setPosition(parent.convertPositionFrom(segmentMiddle(hand, finger), null))
-        setQuaternion(parent.convertRotationFrom(hand[base].rotation, null))
+        setQuaternion(parent.convertRotationFrom(turned, null))
     }
 }
+
+/** Half a turn round the finger (the ring's hole runs along Z). */
+private val HALF_TURN_ROUND_FINGER = Quat(Vector3(0f, 0f, 1f), PI.toFloat())
 
 /** The brush's reach in metres for the slider's [size] (0 to 1). */
 internal fun brushRadius(size: Float): Float = BRUSH_MIN_M + (BRUSH_MAX_M - BRUSH_MIN_M) * size.coerceIn(0f, 1f)

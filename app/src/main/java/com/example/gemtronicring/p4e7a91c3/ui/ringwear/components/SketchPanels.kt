@@ -102,7 +102,15 @@ private val Pad = 24.dp
 private val Dim = Color(0xFF2A2F2C)
 private const val SEND_EVERY_MS = 300L
 private const val SKETCH_PX = 512
-private const val PEN_WIDTH_PX = 6f
+/** Pen line width at each end of the slider, in pixels of the 512 px drawing. */
+private const val PEN_MIN_PX = 2f
+private const val PEN_MAX_PX = 24f
+private const val PEN_START = 0.18f
+
+/** One line of the drawing, with the pen width it was drawn at (512 px drawing pixels). */
+internal data class Ink(val points: List<Offset>, val widthPx: Float)
+
+private fun penWidth(size: Float) = PEN_MIN_PX + (PEN_MAX_PX - PEN_MIN_PX) * size.coerceIn(0f, 1f)
 private const val GUIDE_WIDTH_PX = 3f
 private const val GUIDE_GREY = 0xFFC8C8C8.toInt()
 private const val GALLERY_COLUMNS = 5
@@ -326,13 +334,16 @@ internal fun GalleryPanel(gallery: GalleryUiState, onEvent: (RingWearEvent) -> U
 /** Drawing on the left, the live render on the right, choices underneath. */
 @Composable
 internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit) {
-    val strokes = remember { mutableStateListOf<List<Offset>>() }
+    val strokes = remember { mutableStateListOf<Ink>() }
     val current = remember { mutableStateListOf<Offset>() }
     // The eraser cuts away the parts of lines it passes over.
     var erasing by remember { mutableStateOf(false) }
     val erasingNow by rememberUpdatedState(erasing)
+    // Pen size on the slider (0 to 1); each new line keeps the width it was drawn at.
+    var penSize by remember { mutableStateOf(PEN_START) }
+    val penPx by rememberUpdatedState(penWidth(penSize))
     // The drawing before each change, so Undo also undoes erasing and clearing.
-    val past = remember { mutableListOf<List<List<Offset>>>() }
+    val past = remember { mutableListOf<List<Ink>>() }
     fun keepForUndo() {
         past.add(strokes.toList())
         if (past.size > UNDO_LIMIT) past.removeAt(0)
@@ -351,7 +362,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
     // and the pen keeps up with the pointer.
     fun send() {
         lastSent = System.currentTimeMillis()
-        val all = strokes.toList() + listOf(current.toList()).filter { it.isNotEmpty() }
+        val all = strokes.toList() + listOf(Ink(current.toList(), penPx)).filter { it.points.isNotEmpty() }
         val px = canvasPx
         val view = options.view
         val number = ++sent
@@ -369,7 +380,7 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
         val shaped =
             shaper.shape(current.map { StrokePoint(it.x, it.y) }, smooth = options.smooth, shapes = options.shapes)
         keepForUndo()
-        strokes.add(shaped.map { Offset(it.x, it.y) })
+        strokes.add(Ink(shaped.map { Offset(it.x, it.y) }, penPx))
         current.clear()
         send()
     }
@@ -406,7 +417,9 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                                         keepForUndo()
                                         val radius = canvasPx * ERASER_RADIUS
                                         fun rub(at: Offset) {
-                                            val left = eraseAround(strokes.toList(), at, radius)
+                                            val left = strokes.toList().flatMap { ink ->
+                                                eraseAround(listOf(ink.points), at, radius).map { Ink(it, ink.widthPx) }
+                                            }
                                             strokes.clear()
                                             strokes.addAll(left)
                                         }
@@ -438,10 +451,10 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                     guideShapes(sketch.view).forEach { line ->
                         drawPath(smoothPath(line.map { Offset(it.x * size.width, it.y * size.height) }), Color(GUIDE_GREY), style = guide)
                     }
-                    val pen = Stroke(width = PEN_WIDTH_PX * size.width / SKETCH_PX, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                    (strokes + listOf(current.toList())).forEach { points ->
-                        if (points.isEmpty()) return@forEach
-                        drawPath(smoothPath(points), Color.Black, style = pen)
+                    (strokes + listOf(Ink(current.toList(), penPx))).forEach { ink ->
+                        if (ink.points.isEmpty()) return@forEach
+                        val pen = Stroke(width = ink.widthPx * size.width / SKETCH_PX, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        drawPath(smoothPath(ink.points), Color.Black, style = pen)
                     }
                 }
                 RenderView(sketch)
@@ -473,6 +486,13 @@ internal fun SketchPanel(sketch: SketchUiState, onEvent: (RingWearEvent) -> Unit
                 ) {
                     Text(stringResource(R.string.sketch_make_3d))
                 }
+            }
+            // Pen size: a thin line and a thick one either side show which way is thicker.
+            Row(horizontalArrangement = Arrangement.spacedBy(SmallGap), verticalAlignment = Alignment.CenterVertically) {
+                Label(stringResource(R.string.sketch_pen_size))
+                Box(Modifier.size(width = 18.dp, height = 2.dp).background(light()))
+                Slider(value = penSize, onValueChange = { penSize = it }, modifier = Modifier.width(SliderWidth))
+                Box(Modifier.size(width = 18.dp, height = 10.dp).clip(RoundedCornerShape(5.dp)).background(light()))
             }
             Body(statusText(sketch))
             Section(R.string.sketch_help) {
@@ -1040,7 +1060,7 @@ internal fun eraseAround(strokes: List<List<Offset>>, at: Offset, radius: Float)
 }
 
 /** Draws the guide and the strokes at 512 px, the size the render server expects. */
-private fun toDataUri(strokes: List<List<Offset>>, view: SketchView, canvasPx: Int): String {
+private fun toDataUri(strokes: List<Ink>, view: SketchView, canvasPx: Int): String {
     val bitmap = Bitmap.createBitmap(SKETCH_PX, SKETCH_PX, Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
     canvas.drawColor(android.graphics.Color.WHITE)
@@ -1064,8 +1084,7 @@ private fun toDataUri(strokes: List<List<Offset>>, view: SketchView, canvasPx: I
     val guide = paint(GUIDE_GREY, GUIDE_WIDTH_PX)
     guideShapes(view).forEach { line -> draw(line.map { Offset(it.x * SKETCH_PX, it.y * SKETCH_PX) }, guide) }
     val k = SKETCH_PX.toFloat() / canvasPx.coerceAtLeast(1)
-    val pen = paint(android.graphics.Color.BLACK, PEN_WIDTH_PX)
-    strokes.forEach { points -> draw(points.map { Offset(it.x * k, it.y * k) }, pen) }
+    strokes.forEach { ink -> draw(ink.points.map { Offset(it.x * k, it.y * k) }, paint(android.graphics.Color.BLACK, ink.widthPx)) }
     val out = ByteArrayOutputStream()
     bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
     bitmap.recycle()

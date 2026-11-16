@@ -188,6 +188,10 @@ internal class GeneratedRingRig private constructor(
         root.addChild(box)
         hitBox = box
         hitBoxFitted = bounds != null
+        Log.i(
+            "SketchOn",
+            if (bounds != null) "hit box fitted: ${bounds.first} to ${bounds.second}" else "hit box: sphere until the surface is read",
+        )
     }
 
     /**
